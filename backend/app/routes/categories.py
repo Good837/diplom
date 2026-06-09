@@ -13,7 +13,7 @@ categories_bp = Blueprint("categories", __name__)
 @categories_bp.get("")
 def list_categories():
     items = Category.query.order_by(Category.name.asc()).all()
-    return jsonify({"items": [c.to_dict() for c in items]})
+    return jsonify({"items": [c.to_dict(include_recipe_count=True) for c in items]})
 
 
 @categories_bp.post("")

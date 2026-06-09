@@ -64,6 +64,11 @@ export function AuthProvider({ children }) {
         setUserState(nextUser);
         setStoredUser(nextUser);
       },
+      establishSession(accessToken, nextUser) {
+        setToken(accessToken);
+        setUserState(nextUser);
+        setStoredUser(nextUser);
+      },
       async login(email, password) {
         const data = await apiFetch('/auth/login', { method: 'POST', body: { email, password } });
         setToken(data.access_token);
@@ -77,6 +82,18 @@ export function AuthProvider({ children }) {
           body: { username, email, password },
         });
         return data;
+      },
+      async verifyEmail(verifyToken) {
+        const data = await apiFetch('/auth/verify-email', { method: 'POST', body: { token: verifyToken } });
+        if (data.access_token && data.user) {
+          setToken(data.access_token);
+          setUserState(data.user);
+          setStoredUser(data.user);
+        }
+        return data;
+      },
+      async resendVerification(email) {
+        return apiFetch('/auth/resend-verification', { method: 'POST', body: { email } });
       },
       logout() {
         setToken(null);

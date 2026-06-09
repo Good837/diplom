@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 
 import { apiFetch } from '../api/client';
 import { useAuth } from '../state/auth';
+import { formatCommentDate } from '../utils/formatDate';
 
 export function Admin() {
   const auth = useAuth();
@@ -18,6 +19,8 @@ export function Admin() {
 
   const [recipes, setRecipes] = useState([]);
   const [recipesQ, setRecipesQ] = useState('');
+
+  const [comments, setComments] = useState([]);
 
   const canSee = Boolean(auth.isAuthenticated && auth.user?.is_admin);
 
@@ -73,6 +76,34 @@ export function Admin() {
     }
     loadRecipes();
   }, [tab, recipesQueryString, canSee]);
+
+  useEffect(() => {
+    async function loadComments() {
+      if (!canSee || tab !== 'comments') return;
+      setError('');
+      try {
+        const data = await apiFetch('/admin/comments', { auth: true });
+        setComments(data.items || []);
+      } catch (e) {
+        setError(e.message || 'Не вдалося завантажити коментарі');
+      }
+    }
+    loadComments();
+  }, [tab, canSee]);
+
+  async function deleteComment(id) {
+    if (!window.confirm('Видалити коментар?')) return;
+    setBusy(true);
+    setError('');
+    try {
+      await apiFetch(`/comments/${id}`, { method: 'DELETE', auth: true });
+      setComments((prev) => prev.filter((c) => c.id !== id));
+    } catch (e) {
+      setError(e.message || 'Не вдалося видалити коментар');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function createCategory() {
     if (!newCategory.trim()) return;
@@ -137,43 +168,44 @@ export function Admin() {
 
   return (
     <div>
-      <div className="pageHeader">
-        <div>
-          <h1>Адмін‑панель</h1>
-          <p className="muted">Керування категоріями, користувачами та рецептами.</p>
-        </div>
-      </div>
+      <header className="catalogPageHeader adminPageHeader">
+        <h1 className="catalogPageTitle fontSerif">Адмін‑панель</h1>
+        <p className="catalogPageSubtitle muted">
+          Модерація контенту (RBAC): категорії, користувачі, рецепти та коментарі
+        </p>
+      </header>
 
       {error ? <div className="alert">{error}</div> : null}
 
-      <div className="card">
-        <div className="row" style={{ flexWrap: 'wrap' }}>
-          <button className={tab === 'categories' ? 'btn' : 'btn btnSecondary'} onClick={() => setTab('categories')}>
-            Категорії
-          </button>
-          <button className={tab === 'users' ? 'btn' : 'btn btnSecondary'} onClick={() => setTab('users')}>
-            Користувачі
-          </button>
-          <button className={tab === 'recipes' ? 'btn' : 'btn btnSecondary'} onClick={() => setTab('recipes')}>
-            Рецепти
-          </button>
-        </div>
+      <div className="adminTabs">
+        <button className={tab === 'categories' ? 'btn' : 'btn btnSecondary'} type="button" onClick={() => setTab('categories')}>
+          Категорії
+        </button>
+        <button className={tab === 'users' ? 'btn' : 'btn btnSecondary'} type="button" onClick={() => setTab('users')}>
+          Користувачі
+        </button>
+        <button className={tab === 'recipes' ? 'btn' : 'btn btnSecondary'} type="button" onClick={() => setTab('recipes')}>
+          Рецепти
+        </button>
+        <button className={tab === 'comments' ? 'btn' : 'btn btnSecondary'} type="button" onClick={() => setTab('comments')}>
+          Коментарі
+        </button>
       </div>
 
       {tab === 'categories' ? (
-        <div className="card">
-          <h2>Категорії</h2>
+        <div className="contentBlock">
+          <h2 className="contentBlockTitle fontSerif">Категорії</h2>
           <div className="row">
             <input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="Нова категорія" />
-            <button className="btn" onClick={createCategory} disabled={busy || !newCategory.trim()}>
+            <button className="btn" type="button" onClick={createCategory} disabled={busy || !newCategory.trim()}>
               Додати
             </button>
           </div>
-          <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+          <div className="adminList">
             {categories.map((c) => (
-              <div key={c.id} className="row" style={{ justifyContent: 'space-between' }}>
-                <span>{c.name}</span>
-                <button className="btn btnDanger btnSmall" onClick={() => deleteCategory(c.id)} disabled={busy}>
+              <div key={c.id} className="adminListItem">
+                <span className="adminListItemTitle">{c.name}</span>
+                <button className="btn btnDanger btnSmall" type="button" onClick={() => deleteCategory(c.id)} disabled={busy}>
                   Видалити
                 </button>
               </div>
@@ -183,31 +215,29 @@ export function Admin() {
       ) : null}
 
       {tab === 'users' ? (
-        <div className="card">
-          <h2>Користувачі</h2>
+        <div className="contentBlock">
+          <h2 className="contentBlockTitle fontSerif">Користувачі</h2>
           <div className="row">
             <input value={usersQ} onChange={(e) => setUsersQ(e.target.value)} placeholder="Пошук (username/email/ім’я)" />
-            <button className="btn btnSecondary" onClick={() => setUsersQ('')} disabled={busy}>
+            <button className="btn btnSecondary" type="button" onClick={() => setUsersQ('')} disabled={busy}>
               Скинути
             </button>
           </div>
-          <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+          <div className="adminList">
             {users.map((u) => (
-              <div key={u.id} className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div key={u.id} className="adminListItem">
                 <div>
-                  <div style={{ fontWeight: 800 }}>
-                    {u.display_name || `@${u.username}`} {u.is_admin ? <span className="muted">• admin</span> : null}
+                  <div className="adminListItemTitle">
+                    {u.display_name || `@${u.username}`} {u.is_admin ? <span className="muted"> • admin</span> : null}
                   </div>
-                  <div className="muted" style={{ fontSize: 13 }}>
+                  <div className="adminListItemMeta">
                     @{u.username} • {u.email}
                   </div>
                   <div style={{ marginTop: 6 }}>
-                    <Link className="muted" to={`/u/${u.username}`}>
-                      Публічний профіль
-                    </Link>
+                    <Link to={`/u/${u.username}`}>Публічний профіль →</Link>
                   </div>
                 </div>
-                <button className="btn btnDanger btnSmall" onClick={() => deleteUser(u.id)} disabled={busy}>
+                <button className="btn btnDanger btnSmall" type="button" onClick={() => deleteUser(u.id)} disabled={busy}>
                   Видалити
                 </button>
               </div>
@@ -218,32 +248,69 @@ export function Admin() {
       ) : null}
 
       {tab === 'recipes' ? (
-        <div className="card">
-          <h2>Рецепти</h2>
+        <div className="contentBlock">
+          <h2 className="contentBlockTitle fontSerif">Рецепти</h2>
           <div className="row">
             <input value={recipesQ} onChange={(e) => setRecipesQ(e.target.value)} placeholder="Пошук за назвою" />
-            <button className="btn btnSecondary" onClick={() => setRecipesQ('')} disabled={busy}>
+            <button className="btn btnSecondary" type="button" onClick={() => setRecipesQ('')} disabled={busy}>
               Скинути
             </button>
           </div>
-          <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+          <div className="adminList">
             {recipes.map((r) => (
-              <div key={r.id} className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div key={r.id} className="adminListItem">
                 <div>
-                  <div style={{ fontWeight: 800 }}>
+                  <div className="adminListItemTitle">
                     <Link to={`/recipes/${r.id}`}>{r.title}</Link>
                   </div>
-                  <div className="muted" style={{ fontSize: 13 }}>
+                  <div className="adminListItemMeta">
                     {r.category?.name || 'Без категорії'} • Автор:{' '}
                     {r.owner?.username ? <Link to={`/u/${r.owner.username}`}>@{r.owner.username}</Link> : '—'}
                   </div>
                 </div>
-                <button className="btn btnDanger btnSmall" onClick={() => deleteRecipe(r.id)} disabled={busy}>
+                <button className="btn btnDanger btnSmall" type="button" onClick={() => deleteRecipe(r.id)} disabled={busy}>
                   Видалити
                 </button>
               </div>
             ))}
             {!recipes.length ? <p className="muted">Нічого не знайдено.</p> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'comments' ? (
+        <div className="contentBlock">
+          <h2 className="contentBlockTitle fontSerif">Модерація коментарів</h2>
+          <div className="adminList">
+            {comments.map((c) => (
+              <div key={c.id} className="adminListItem">
+                <div>
+                  <p className="pre" style={{ margin: '0 0 8px' }}>
+                    {c.body}
+                  </p>
+                  <div className="adminListItemMeta">
+                    {c.recipe_title ? (
+                      <>
+                        Рецепт: <Link to={`/recipes/${c.recipe_id}`}>{c.recipe_title}</Link>
+                        {' • '}
+                      </>
+                    ) : null}
+                    {c.author?.username ? (
+                      <>
+                        Автор: <Link to={`/u/${c.author.username}`}>@{c.author.username}</Link>
+                      </>
+                    ) : (
+                      'Автор: —'
+                    )}
+                    {c.created_at ? <> • {formatCommentDate(c.created_at)}</> : null}
+                  </div>
+                </div>
+                <button className="btn btnDanger btnSmall" type="button" onClick={() => deleteComment(c.id)} disabled={busy}>
+                  Видалити
+                </button>
+              </div>
+            ))}
+            {!comments.length ? <p className="muted">Коментарів немає.</p> : null}
           </div>
         </div>
       ) : null}

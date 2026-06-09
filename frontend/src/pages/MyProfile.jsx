@@ -1,7 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import { Link } from 'react-router-dom';
 
-import { apiFetch, apiFetchFormData, resolveAssetUrl } from '../api/client';
+import { apiFetch, apiFetchFormData } from '../api/client';
+import { ProfileActivityTabs } from '../components/ProfileActivityTabs';
+import { ProfileBanner } from '../components/ProfileBanner';
+import { ProfileEditModal } from '../components/ProfileEditModal';
 import { useAuth } from '../state/auth';
 
 export function MyProfile() {
@@ -10,36 +14,26 @@ export function MyProfile() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [bio, setBio] = useState('');
-
+  const [editing, setEditing] = useState(false);
   const [myRecipes, setMyRecipes] = useState([]);
   const [saved, setSaved] = useState([]);
-
-  const avatarUrl = resolveAssetUrl(auth.user?.avatar_url || '');
-
-  const canSave = useMemo(() => {
-    return username.trim().length > 0 && displayName.trim().length > 0;
-  }, [username, displayName]);
+  const [comments, setComments] = useState([]);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       setError('');
       try {
-        const [meData, myList, savedList] = await Promise.all([
+        const [meData, myList, savedList, commentsList] = await Promise.all([
           apiFetch('/users/me', { auth: true }),
           apiFetch('/recipes?owner=me', { auth: true }),
           apiFetch('/users/me/saved', { auth: true }),
+          apiFetch('/users/me/comments', { auth: true }),
         ]);
         auth.setUser(meData.user);
-        setDisplayName(meData.user?.display_name || '');
-        setUsername(meData.user?.username || '');
-        setBio(meData.user?.bio || '');
         setMyRecipes(myList.items || []);
         setSaved(savedList.items || []);
+        setComments(commentsList.items || []);
       } catch (e) {
         setError(e.message || 'Не вдалося завантажити профіль');
       } finally {
@@ -50,23 +44,32 @@ export function MyProfile() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function saveProfile() {
-    if (!canSave) return;
+  async function saveProfile(payload) {
     setBusy(true);
     setError('');
     setMessage('');
     try {
+      if (payload.avatar_file) {
+        const fd = new FormData();
+        fd.append('file', payload.avatar_file);
+        const uploaded = await apiFetchFormData('/uploads/avatar', { auth: true, formData: fd });
+        auth.setUser({ ...(auth.user || {}), avatar_url: uploaded.avatar_url });
+      }
+
       const data = await apiFetch('/users/me', {
         method: 'PUT',
         auth: true,
         body: {
-          display_name: displayName.trim(),
-          username: username.trim(),
-          bio: bio,
+          display_name: payload.display_name,
+          username: payload.username,
+          bio: payload.bio,
+          is_private: payload.is_private,
         },
       });
+
       auth.setUser(data.user);
       setMessage('Профіль оновлено');
+      setEditing(false);
     } catch (e) {
       setError(e.message || 'Не вдалося зберегти профіль');
     } finally {
@@ -74,145 +77,67 @@ export function MyProfile() {
     }
   }
 
-  async function uploadAvatar(file) {
-    if (!file) return;
-    setBusy(true);
-    setError('');
-    setMessage('');
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const data = await apiFetchFormData('/uploads/avatar', { auth: true, formData: fd });
-      const nextUser = { ...(auth.user || {}), avatar_url: data.avatar_url };
-      auth.setUser(nextUser);
-      setMessage('Аватарку оновлено');
-    } catch (e) {
-      setError(e.message || 'Не вдалося завантажити аватарку');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!auth.isAuthenticated) {
     return (
-      <div className="card narrow">
-        <h1>Профіль</h1>
-        <p className="muted">
-          Потрібно <Link to="/login">увійти</Link>, щоб переглядати профіль.
-        </p>
+      <div className="authPage">
+        <div className="card narrow">
+          <h1 className="fontSerif">Профіль</h1>
+          <p className="muted">
+            Потрібно <Link to="/login">увійти</Link>, щоб переглядати профіль.
+          </p>
+        </div>
       </div>
     );
   }
 
   if (loading) return <p className="muted">Завантаження…</p>;
 
+  const profilePills = [
+    {
+      label: auth.user?.is_private ? 'Приватний' : 'Публічний',
+      className: auth.user?.is_private ? 'pill' : 'pill pillSoft',
+    },
+    ...(auth.user?.is_admin ? [{ label: 'Адміністратор', className: 'pill' }] : []),
+    { label: `Рецептів: ${myRecipes.length}`, className: 'pill pillSoft' },
+    { label: `Збережено: ${saved.length}`, className: 'pill pillSoft' },
+  ];
+
+  const bio =
+    auth.user?.bio || 'Додайте короткий опис про себе — він буде видимий у вашому публічному профілі.';
+
   return (
     <div>
-      <section className="profileHero">
-        <div className="profileHeroInner">
-          <div className="profileHeroMedia">
-            <div className="profileBlob profileBlobA" aria-hidden="true" />
-            <div className="profileBlob profileBlobB" aria-hidden="true" />
+      <header className="catalogPageHeader">
+        <h1 className="catalogPageTitle fontSerif">Мій профіль</h1>
+      </header>
 
-            <div className="profileAvatar">
-              {avatarUrl ? <img src={avatarUrl} alt="Аватарка" /> : <div className="profileAvatarPlaceholder" aria-hidden="true" />}
-            </div>
-
-            <label className="profileUpload">
-              <input
-                type="file"
-                accept="image/*"
-                disabled={busy}
-                onChange={(e) => uploadAvatar(e.target.files && e.target.files[0])}
-              />
-              <span className="muted">Завантажити аватарку</span>
-            </label>
-          </div>
-
-          <div className="profileHeroCopy">
-            <h1 className="profileTitle">{auth.user?.display_name || 'Мій профіль'}</h1>
-            <div className="pillRow">
-              <span className="pill pillSoft">@{auth.user?.username || '—'}</span>
-              {auth.user?.is_admin ? <span className="pill">Адміністратор</span> : null}
-              <span className="pill pillSoft">Рецептів: {myRecipes.length}</span>
-              <span className="pill pillSoft">Збережено: {saved.length}</span>
-            </div>
-            <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-              {bio ? bio : 'Додайте короткий опис про себе — він буде видимий у вашому профілі.'}
-            </p>
-          </div>
-        </div>
-      </section>
+      <ProfileBanner
+        displayName={auth.user?.display_name || 'Мій профіль'}
+        username={auth.user?.username}
+        bio={bio}
+        avatarUrl={auth.user?.avatar_url}
+        pills={profilePills}
+        onEdit={() => setEditing(true)}
+      />
 
       {error ? <div className="alert">{error}</div> : null}
       {message ? <div className="success">{message}</div> : null}
 
-      <div className="card">
-        <h2>Дані профілю</h2>
-        <div className="form">
-          <label className="field">
-            <span className="label">Ім’я (будь‑яке)</span>
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Напр., Олена" />
-          </label>
+      {editing ? (
+        <ProfileEditModal
+          user={auth.user}
+          busy={busy}
+          onClose={() => !busy && setEditing(false)}
+          onSave={saveProfile}
+        />
+      ) : null}
 
-          <label className="field">
-            <span className="label">Ім’я користувача (унікальне)</span>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Напр., olena" />
-          </label>
-
-          <label className="field">
-            <span className="label">Опис</span>
-            <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} placeholder="Коротко про себе…" />
-          </label>
-
-          <div className="row">
-            <button className="btn" onClick={saveProfile} disabled={busy || !canSave}>
-              {busy ? 'Збереження…' : 'Зберегти'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>Мої рецепти</h2>
-        {myRecipes.length ? (
-          <div className="gridCards">
-            {myRecipes.map((r) => (
-              <div key={r.id} className="card" style={{ margin: 0 }}>
-                <h3 className="cardTitle" style={{ margin: 0 }}>
-                  <Link to={`/recipes/${r.id}`}>{r.title}</Link>
-                </h3>
-                <p className="muted" style={{ margin: '6px 0 0' }}>
-                  {r.category?.name || 'Без категорії'} • {r.cooking_time} хв
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">Поки що немає рецептів.</p>
-        )}
-      </div>
-
-      <div className="card">
-        <h2>Збережені рецепти</h2>
-        {saved.length ? (
-          <div className="gridCards">
-            {saved.map((r) => (
-              <div key={r.id} className="card" style={{ margin: 0 }}>
-                <h3 className="cardTitle" style={{ margin: 0 }}>
-                  <Link to={`/recipes/${r.id}`}>{r.title}</Link>
-                </h3>
-                <p className="muted" style={{ margin: '6px 0 0' }}>
-                  {r.category?.name || 'Без категорії'} • {r.cooking_time} хв • Автор: @{r.owner?.username || '—'}
-                </p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">Тут з’являться рецепти, які ви збережете.</p>
-        )}
-      </div>
+      <ProfileActivityTabs
+        recipes={myRecipes}
+        saved={saved}
+        comments={comments}
+        isOwnProfile
+      />
     </div>
   );
 }
-

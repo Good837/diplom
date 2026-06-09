@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required, verify_jwt_in_request
 from sqlalchemy import or_
 
 from ..authz import get_current_user, require_admin
 from ..errors import APIError
 from ..extensions import db
-from ..models import Recipe, SavedRecipe, User
+from ..models import Comment, Recipe, SavedRecipe, User
+from ..ratings import recipes_to_dicts_with_ratings
 
 users_bp = Blueprint("users", __name__)
 
@@ -20,6 +21,48 @@ def _int_query(name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         raise APIError(f"Некоректне значення параметра '{name}'", 400)
+
+
+def _optional_viewer_id() -> int | None:
+    verify_jwt_in_request(optional=True)
+    identity = get_jwt_identity()
+    return int(identity) if identity is not None else None
+
+
+def _can_view_profile_content(user: User, viewer_id: int | None) -> bool:
+    if not user.is_private:
+        return True
+    return viewer_id is not None and int(viewer_id) == int(user.id)
+
+
+def _ordered_saved_recipes(user_id: int) -> list[Recipe]:
+    rows = (
+        SavedRecipe.query.filter(SavedRecipe.user_id == user_id)
+        .order_by(SavedRecipe.created_at.desc())
+        .all()
+    )
+    recipe_ids = [r.recipe_id for r in rows]
+    if not recipe_ids:
+        return []
+
+    recipes = Recipe.query.filter(Recipe.id.in_(recipe_ids)).all()
+    by_id = {r.id: r for r in recipes}
+    return [by_id[rid] for rid in recipe_ids if rid in by_id]
+
+
+def _profile_comments(user_id: int) -> list[dict]:
+    comments = (
+        Comment.query.filter(Comment.author_id == user_id)
+        .order_by(Comment.created_at.desc())
+        .all()
+    )
+    items = []
+    for comment in comments:
+        data = comment.to_dict()
+        if comment.recipe:
+            data["recipe"] = {"id": comment.recipe.id, "title": comment.recipe.title}
+        items.append(data)
+    return items
 
 
 @users_bp.get("")
@@ -95,6 +138,12 @@ def update_me():
             raise APIError("Це ім'я користувача вже зайняте", 409)
         user.username = username
 
+    if "is_private" in data:
+        raw = data.get("is_private")
+        if not isinstance(raw, bool):
+            raise APIError("Поле 'is_private' має бути логічним значенням (true/false)", 400)
+        user.is_private = raw
+
     db.session.commit()
     return jsonify({"message": "Профіль оновлено", "user": user.to_private_dict()})
 
@@ -103,19 +152,15 @@ def update_me():
 @jwt_required()
 def my_saved():
     user = get_current_user()
-    rows = (
-        SavedRecipe.query.filter(SavedRecipe.user_id == user.id)
-        .order_by(SavedRecipe.created_at.desc())
-        .all()
-    )
-    recipe_ids = [r.recipe_id for r in rows]
-    if not recipe_ids:
-        return jsonify({"items": []})
+    ordered = _ordered_saved_recipes(user.id)
+    return jsonify({"items": recipes_to_dicts_with_ratings(ordered, current_user_id=user.id)})
 
-    recipes = Recipe.query.filter(Recipe.id.in_(recipe_ids)).all()
-    by_id = {r.id: r for r in recipes}
-    ordered = [by_id[rid] for rid in recipe_ids if rid in by_id]
-    return jsonify({"items": [r.to_dict() for r in ordered]})
+
+@users_bp.get("/me/comments")
+@jwt_required()
+def my_comments():
+    user = get_current_user()
+    return jsonify({"items": _profile_comments(user.id)})
 
 
 @users_bp.get("/<string:username>")
@@ -127,6 +172,27 @@ def public_profile(username: str):
     if not user:
         raise APIError("Користувача не знайдено", 404)
 
-    recipes = Recipe.query.filter(Recipe.owner_id == user.id).order_by(Recipe.created_at.desc()).all()
-    return jsonify({"user": user.to_public_dict(), "recipes": [r.to_dict() for r in recipes]})
+    viewer_id = _optional_viewer_id()
+    can_view = _can_view_profile_content(user, viewer_id)
 
+    profile = {
+        **user.to_public_dict(),
+        "member_since": user.created_at.isoformat() if user.created_at else None,
+    }
+
+    if can_view:
+        recipes = Recipe.query.filter(Recipe.owner_id == user.id).order_by(Recipe.created_at.desc()).all()
+        saved = _ordered_saved_recipes(user.id)
+        profile["recipe_count"] = len(recipes)
+        profile["saved_count"] = len(saved)
+        profile["comment_count"] = Comment.query.filter(Comment.author_id == user.id).count()
+        return jsonify(
+            {
+                "user": profile,
+                "recipes": recipes_to_dicts_with_ratings(recipes, current_user_id=viewer_id),
+                "saved": recipes_to_dicts_with_ratings(saved, current_user_id=viewer_id),
+                "comments": _profile_comments(user.id),
+            }
+        )
+
+    return jsonify({"user": profile, "recipes": [], "saved": [], "comments": []})

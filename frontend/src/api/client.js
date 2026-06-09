@@ -1,5 +1,6 @@
-const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api';
+import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api';
 const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
 
 export function resolveAssetUrl(url) {
@@ -19,78 +20,62 @@ export function setToken(token) {
   else localStorage.setItem('tastyhub_token', token);
 }
 
-export async function apiFetch(path, { method = 'GET', body, auth = false, headers = {} } = {}) {
-  const finalHeaders = {
-    Accept: 'application/json',
-    ...headers,
-  };
+const api = axios.create({
+  baseURL: API_URL,
+  headers: { Accept: 'application/json' },
+});
 
-  if (body !== undefined) {
-    finalHeaders['Content-Type'] = 'application/json; charset=utf-8';
-  }
-
-  if (auth) {
+api.interceptors.request.use((config) => {
+  if (config.auth) {
     const token = getToken();
-    if (token) finalHeaders.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    delete config.auth;
   }
+  return config;
+});
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: finalHeaders,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+function toApiError(error) {
+  const data = error.response?.data;
+  const message =
+    (data && (data.error || data.message)) || error.message || 'Сталася помилка під час запиту до сервера';
+  const err = new Error(message);
+  err.status = error.response?.status;
+  err.data = data;
+  return err;
+}
 
-  let data = null;
+export async function apiFetch(path, { method = 'GET', body, auth = false, headers = {} } = {}) {
   try {
-    data = await res.json();
-  } catch {
-    // ignore non-json
+    const finalHeaders = { ...headers };
+    if (body !== undefined) {
+      finalHeaders['Content-Type'] = 'application/json; charset=utf-8';
+    }
+    const res = await api.request({
+      url: path,
+      method,
+      data: body,
+      auth,
+      headers: finalHeaders,
+    });
+    return res.data;
+  } catch (error) {
+    throw toApiError(error);
   }
-
-  if (!res.ok) {
-    const message = (data && (data.error || data.message)) || 'Сталася помилка під час запиту до сервера';
-    const err = new Error(message);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-
-  return data;
 }
 
 export async function apiFetchFormData(path, { method = 'POST', formData, auth = false, headers = {} } = {}) {
-  const finalHeaders = {
-    Accept: 'application/json',
-    ...headers,
-  };
-
-  // IMPORTANT: do not set Content-Type for FormData; the browser will add boundary.
-  if (auth) {
-    const token = getToken();
-    if (token) finalHeaders.Authorization = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: finalHeaders,
-    body: formData,
-  });
-
-  let data = null;
   try {
-    data = await res.json();
-  } catch {
-    // ignore non-json
+    const res = await api.request({
+      url: path,
+      method,
+      data: formData,
+      auth,
+      headers,
+    });
+    return res.data;
+  } catch (error) {
+    throw toApiError(error);
   }
-
-  if (!res.ok) {
-    const message = (data && (data.error || data.message)) || 'Сталася помилка під час запиту до сервера';
-    const err = new Error(message);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-
-  return data;
 }
-
