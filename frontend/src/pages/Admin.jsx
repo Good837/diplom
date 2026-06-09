@@ -170,9 +170,6 @@ export function Admin() {
     <div>
       <header className="catalogPageHeader adminPageHeader">
         <h1 className="catalogPageTitle fontSerif">Адмін‑панель</h1>
-        <p className="catalogPageSubtitle muted">
-          Модерація контенту (RBAC): категорії, користувачі, рецепти та коментарі
-        </p>
       </header>
 
       {error ? <div className="alert">{error}</div> : null}

@@ -229,9 +229,6 @@ export function Home() {
     <div>
       <header className="catalogPageHeader">
         <h1 className="catalogPageTitle fontSerif">Каталог рецептів</h1>
-        <p className="catalogPageSubtitle muted">
-          Комбіновані фільтри: категорія, час приготування та інгредієнт; сортування та пагінація
-        </p>
       </header>
 
       {error ? <div className="alert">{error}</div> : null}

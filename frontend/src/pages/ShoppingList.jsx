@@ -91,9 +91,6 @@ export function ShoppingList() {
     <div>
       <header className="catalogPageHeader">
         <h1 className="catalogPageTitle fontSerif">Список покупок</h1>
-        <p className="catalogPageSubtitle muted">
-          Додайте рецепти — інгредієнти зберуться в один зведений список
-        </p>
       </header>
 
       {error ? <div className="alert">{error}</div> : null}

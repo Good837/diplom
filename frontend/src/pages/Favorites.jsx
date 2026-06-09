@@ -49,9 +49,6 @@ export function Favorites() {
     <div>
       <header className="catalogPageHeader">
         <h1 className="catalogPageTitle fontSerif">Улюблені</h1>
-        <p className="catalogPageSubtitle muted">
-          Рецепти, які ви зберегли на сервері — доступні з будь-якого пристрою.
-        </p>
       </header>
 
       {error ? <div className="alert">{error}</div> : null}
