@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from ..authz import get_current_user, require_admin
 from ..errors import APIError
 from ..extensions import db
-from ..models import Comment, Recipe, SavedRecipe, User
+from ..models import Comment, Recipe, RecipeStatus, SavedRecipe, User
 from ..ratings import recipes_to_dicts_with_ratings
 
 users_bp = Blueprint("users", __name__)
@@ -181,7 +181,10 @@ def public_profile(username: str):
     }
 
     if can_view:
-        recipes = Recipe.query.filter(Recipe.owner_id == user.id).order_by(Recipe.created_at.desc()).all()
+        recipes_query = Recipe.query.filter(Recipe.owner_id == user.id)
+        if viewer_id is None or int(viewer_id) != int(user.id):
+            recipes_query = recipes_query.filter(Recipe.status == RecipeStatus.approved)
+        recipes = recipes_query.order_by(Recipe.created_at.desc()).all()
         saved = _ordered_saved_recipes(user.id)
         profile["recipe_count"] = len(recipes)
         profile["saved_count"] = len(saved)

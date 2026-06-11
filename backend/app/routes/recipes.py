@@ -4,11 +4,16 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required, verify_jwt_in_request
 from sqlalchemy import func
 
-from ..authz import can_manage_recipe, get_current_user
+from ..authz import (
+    can_manage_recipe,
+    can_view_recipe,
+    get_current_user,
+    require_approved_recipe,
+)
 from ..errors import APIError
 from ..extensions import db
 from ..ingredients import parse_ingredients_payload
-from ..models import Category, Comment, Rating, Recipe, RecipeIngredient, SavedRecipe
+from ..models import Category, Comment, Rating, Recipe, RecipeIngredient, RecipeStatus, SavedRecipe, User
 from ..ratings import recipe_to_dict_with_ratings, recipes_to_dicts_with_ratings
 
 recipes_bp = Blueprint("recipes", __name__)
@@ -27,6 +32,33 @@ def _optional_user_id() -> int | None:
     verify_jwt_in_request(optional=True)
     identity = get_jwt_identity()
     return int(identity) if identity is not None else None
+
+
+def _optional_current_user() -> User | None:
+    verify_jwt_in_request(optional=True)
+    identity = get_jwt_identity()
+    if identity is None:
+        return None
+    return User.query.get(int(identity))
+
+
+def _parse_status_filter(raw: str) -> RecipeStatus:
+    try:
+        return RecipeStatus(raw.strip().lower())
+    except ValueError:
+        raise APIError("Некоректне значення параметра 'status'", 400)
+
+
+def _get_recipe_or_404(recipe_id: int) -> Recipe:
+    recipe = Recipe.query.get(recipe_id)
+    if not recipe:
+        raise APIError("Рецепт не знайдено", 404)
+    return recipe
+
+
+def _require_recipe_view(recipe: Recipe) -> None:
+    if not can_view_recipe(recipe=recipe, viewer=_optional_current_user()):
+        raise APIError("Рецепт не знайдено", 404)
 
 
 def _apply_ingredients(recipe: Recipe, items: list[dict]) -> None:
@@ -53,6 +85,29 @@ def _parse_rating_value(data: dict) -> int:
     return value
 
 
+def _parse_ingredient_filters() -> list[str]:
+    names: list[str] = []
+
+    ingredients_raw = (request.args.get("ingredients") or "").strip()
+    if ingredients_raw:
+        names.extend(part.strip() for part in ingredients_raw.split(",") if part.strip())
+
+    for part in request.args.getlist("ingredient"):
+        text = (part or "").strip()
+        if text:
+            names.append(text)
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for name in names:
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(name)
+    return unique
+
+
 def _paginate(query):
     page = _int_query("page", 1) or 1
     per_page = _int_query("per_page", 20) or 20
@@ -70,24 +125,36 @@ def _paginate(query):
 @recipes_bp.get("")
 def list_recipes():
     q = (request.args.get("q") or "").strip()
-    ingredient = (request.args.get("ingredient") or "").strip()
+    ingredient_names = _parse_ingredient_filters()
     category_id = _int_query("category_id", None)
     cooking_time_max = _int_query("cooking_time_max", None)
     cooking_time_min = _int_query("cooking_time_min", None)
     owner = (request.args.get("owner") or "").strip().lower()
+    status_raw = (request.args.get("status") or "").strip().lower()
     sort = (request.args.get("sort") or "newest").strip().lower()
     current_user_id = _optional_user_id()
+    current_user = _optional_current_user()
 
     query = Recipe.query
+
+    if owner == "me":
+        verify_jwt_in_request()
+        user_id = int(get_jwt_identity())
+        query = query.filter(Recipe.owner_id == user_id)
+    elif status_raw and current_user and current_user.is_admin:
+        query = query.filter(Recipe.status == _parse_status_filter(status_raw))
+    else:
+        query = query.filter(Recipe.status == RecipeStatus.approved)
 
     if q:
         like = f"%{q}%"
         # Title-only search (as required by spec)
         query = query.filter(Recipe.title.ilike(like))
 
-    if ingredient:
-        like = f"%{ingredient}%"
-        query = query.join(RecipeIngredient).filter(RecipeIngredient.name.ilike(like)).distinct()
+    for ingredient_name in ingredient_names:
+        query = query.filter(
+            Recipe.ingredients.any(func.lower(RecipeIngredient.name) == ingredient_name.casefold())
+        )
 
     if category_id is not None:
         query = query.filter(Recipe.category_id == category_id)
@@ -97,11 +164,6 @@ def list_recipes():
 
     if cooking_time_min is not None:
         query = query.filter(Recipe.cooking_time >= cooking_time_min)
-
-    if owner == "me":
-        verify_jwt_in_request()
-        user_id = int(get_jwt_identity())
-        query = query.filter(Recipe.owner_id == user_id)
 
     if sort == "title":
         query = query.order_by(Recipe.title.asc())
@@ -148,9 +210,8 @@ def list_recipes():
 
 @recipes_bp.get("/<int:recipe_id>")
 def get_recipe(recipe_id: int):
-    recipe = Recipe.query.get(recipe_id)
-    if not recipe:
-        raise APIError("Рецепт не знайдено", 404)
+    recipe = _get_recipe_or_404(recipe_id)
+    _require_recipe_view(recipe)
     return jsonify({"recipe": recipe_to_dict_with_ratings(recipe, current_user_id=_optional_user_id())})
 
 
@@ -194,13 +255,17 @@ def create_recipe():
         image_url=(str(data.get("image_url")).strip() if data.get("image_url") else None),
         owner_id=owner_id,
         category_id=category_id,
+        status=RecipeStatus.pending,
     )
     _apply_ingredients(recipe, ingredient_items)
     db.session.add(recipe)
     db.session.commit()
 
     return jsonify(
-        {"message": "Рецепт успішно створено", "recipe": recipe_to_dict_with_ratings(recipe, current_user_id=owner_id)}
+        {
+            "message": "Рецепт надіслано на модерацію",
+            "recipe": recipe_to_dict_with_ratings(recipe, current_user_id=owner_id),
+        }
     ), 201
 
 
@@ -248,10 +313,11 @@ def update_recipe(recipe_id: int):
             raise APIError("Категорію не знайдено", 404)
         recipe.category_id = category_id
 
+    recipe.status = RecipeStatus.pending
     db.session.commit()
     return jsonify(
         {
-            "message": "Рецепт успішно оновлено",
+            "message": "Рецепт оновлено та надіслано на повторну модерацію",
             "recipe": recipe_to_dict_with_ratings(recipe, current_user_id=user_id),
         }
     )
@@ -275,8 +341,9 @@ def delete_recipe(recipe_id: int):
 
 @recipes_bp.get("/<int:recipe_id>/comments")
 def list_comments(recipe_id: int):
-    if not Recipe.query.get(recipe_id):
-        raise APIError("Рецепт не знайдено", 404)
+    recipe = _get_recipe_or_404(recipe_id)
+    _require_recipe_view(recipe)
+    require_approved_recipe(recipe)
 
     items = (
         Comment.query.filter(Comment.recipe_id == recipe_id)
@@ -289,8 +356,9 @@ def list_comments(recipe_id: int):
 @recipes_bp.post("/<int:recipe_id>/comments")
 @jwt_required()
 def create_comment(recipe_id: int):
-    if not Recipe.query.get(recipe_id):
-        raise APIError("Рецепт не знайдено", 404)
+    recipe = _get_recipe_or_404(recipe_id)
+    _require_recipe_view(recipe)
+    require_approved_recipe(recipe)
 
     data = request.get_json(silent=True) or {}
     body = str(data.get("body") or "").strip()
@@ -307,9 +375,9 @@ def create_comment(recipe_id: int):
 @recipes_bp.put("/<int:recipe_id>/rating")
 @jwt_required()
 def upsert_rating(recipe_id: int):
-    recipe = Recipe.query.get(recipe_id)
-    if not recipe:
-        raise APIError("Рецепт не знайдено", 404)
+    recipe = _get_recipe_or_404(recipe_id)
+    _require_recipe_view(recipe)
+    require_approved_recipe(recipe)
 
     user_id = int(get_jwt_identity())
     if int(recipe.owner_id) == user_id:
@@ -354,8 +422,9 @@ def delete_rating(recipe_id: int):
 @recipes_bp.post("/<int:recipe_id>/save")
 @jwt_required()
 def save_recipe(recipe_id: int):
-    if not Recipe.query.get(recipe_id):
-        raise APIError("Рецепт не знайдено", 404)
+    recipe = _get_recipe_or_404(recipe_id)
+    _require_recipe_view(recipe)
+    require_approved_recipe(recipe)
 
     user_id = int(get_jwt_identity())
     exists = SavedRecipe.query.filter_by(user_id=user_id, recipe_id=recipe_id).first()

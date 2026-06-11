@@ -20,6 +20,8 @@ export function Admin() {
   const [recipes, setRecipes] = useState([]);
   const [recipesQ, setRecipesQ] = useState('');
 
+  const [pendingRecipes, setPendingRecipes] = useState([]);
+
   const [comments, setComments] = useState([]);
 
   const canSee = Boolean(auth.isAuthenticated && auth.user?.is_admin);
@@ -76,6 +78,20 @@ export function Admin() {
     }
     loadRecipes();
   }, [tab, recipesQueryString, canSee]);
+
+  useEffect(() => {
+    async function loadPendingRecipes() {
+      if (!canSee || tab !== 'moderation') return;
+      setError('');
+      try {
+        const data = await apiFetch('/admin/recipes/pending', { auth: true });
+        setPendingRecipes(data.items || []);
+      } catch (e) {
+        setError(e.message || 'Не вдалося завантажити чергу модерації');
+      }
+    }
+    loadPendingRecipes();
+  }, [tab, canSee]);
 
   useEffect(() => {
     async function loadComments() {
@@ -155,8 +171,22 @@ export function Admin() {
     try {
       await apiFetch(`/recipes/${id}`, { method: 'DELETE', auth: true });
       setRecipes((prev) => prev.filter((r) => r.id !== id));
+      setPendingRecipes((prev) => prev.filter((r) => r.id !== id));
     } catch (e) {
       setError(e.message || 'Не вдалося видалити рецепт');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function moderateRecipe(id, action) {
+    setBusy(true);
+    setError('');
+    try {
+      await apiFetch(`/admin/recipes/${id}/${action}`, { method: 'POST', auth: true });
+      setPendingRecipes((prev) => prev.filter((r) => r.id !== id));
+    } catch (e) {
+      setError(e.message || 'Не вдалося оновити статус рецепта');
     } finally {
       setBusy(false);
     }
@@ -180,6 +210,9 @@ export function Admin() {
         </button>
         <button className={tab === 'users' ? 'btn' : 'btn btnSecondary'} type="button" onClick={() => setTab('users')}>
           Користувачі
+        </button>
+        <button className={tab === 'moderation' ? 'btn' : 'btn btnSecondary'} type="button" onClick={() => setTab('moderation')}>
+          Модерація рецептів
         </button>
         <button className={tab === 'recipes' ? 'btn' : 'btn btnSecondary'} type="button" onClick={() => setTab('recipes')}>
           Рецепти
@@ -240,6 +273,47 @@ export function Admin() {
               </div>
             ))}
             {!users.length ? <p className="muted">Нічого не знайдено.</p> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'moderation' ? (
+        <div className="contentBlock">
+          <h2 className="contentBlockTitle fontSerif">Модерація рецептів</h2>
+          <p className="muted">Рецепти, що очікують схвалення перед публікацією в каталозі.</p>
+          <div className="adminList">
+            {pendingRecipes.map((r) => (
+              <div key={r.id} className="adminListItem">
+                <div>
+                  <div className="adminListItemTitle">
+                    <Link to={`/recipes/${r.id}`}>{r.title}</Link>
+                  </div>
+                  <div className="adminListItemMeta">
+                    {r.category?.name || 'Без категорії'} • Автор:{' '}
+                    {r.owner?.username ? <Link to={`/u/${r.owner.username}`}>@{r.owner.username}</Link> : '—'}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btnSmall"
+                    type="button"
+                    onClick={() => moderateRecipe(r.id, 'approve')}
+                    disabled={busy}
+                  >
+                    Схвалити
+                  </button>
+                  <button
+                    className="btn btnDanger btnSmall"
+                    type="button"
+                    onClick={() => moderateRecipe(r.id, 'reject')}
+                    disabled={busy}
+                  >
+                    Відхилити
+                  </button>
+                </div>
+              </div>
+            ))}
+            {!pendingRecipes.length ? <p className="muted">Немає рецептів на модерації.</p> : null}
           </div>
         </div>
       ) : null}

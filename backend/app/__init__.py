@@ -10,6 +10,7 @@ from .routes.admin import admin_bp
 from .routes.auth import auth_bp
 from .routes.categories import categories_bp
 from .routes.comments import comments_bp
+from .routes.ingredients import ingredients_bp
 from .routes.recipes import recipes_bp
 from .routes.shopping_list import shopping_list_bp
 from .routes.uploads import uploads_bp
@@ -79,6 +80,7 @@ def create_app() -> Flask:
     app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(categories_bp, url_prefix="/api/categories")
     app.register_blueprint(comments_bp, url_prefix="/api/comments")
+    app.register_blueprint(ingredients_bp, url_prefix="/api/ingredients")
     app.register_blueprint(recipes_bp, url_prefix="/api/recipes")
     app.register_blueprint(shopping_list_bp, url_prefix="/api/shopping-list")
     app.register_blueprint(uploads_bp, url_prefix="/api/uploads")

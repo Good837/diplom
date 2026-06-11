@@ -6,7 +6,7 @@ import click
 from flask import Flask
 
 from .extensions import db
-from .models import Category, Recipe, RecipeIngredient, User
+from .models import Category, Recipe, RecipeIngredient, RecipeStatus, User
 from .passwords import hash_password
 from .seed_data import CATEGORIES, DEMO_USER, RECIPES
 
@@ -73,6 +73,7 @@ def _ensure_recipes(owner: User, categories: dict[str, Category]) -> int:
             cooking_time=cooking_time,
             owner_id=owner.id,
             category_id=category.id,
+            status=RecipeStatus.approved,
         )
         db.session.add(recipe)
         db.session.flush()

@@ -7,6 +7,7 @@ import {
   serializeIngredientsForApi,
 } from '../utils/ingredients';
 import { validateRecipeFields } from '../utils/validation';
+import { IngredientNameInput } from './IngredientNameInput';
 
 export function RecipeForm({
   categories,
@@ -157,12 +158,11 @@ export function RecipeForm({
         <div className="ingredientList">
           {ingredientRows.map((row, index) => (
             <div className="ingredientRow" key={index}>
-              <input
-                className="ingredientName"
+              <IngredientNameInput
                 value={row.name}
-                onChange={(e) => updateIngredientRow(index, { name: e.target.value })}
+                onChange={(name) => updateIngredientRow(index, { name })}
                 placeholder="Назва"
-                maxLength={120}
+                disabled={busy}
               />
               <input
                 className="ingredientAmount"

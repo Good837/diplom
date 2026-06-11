@@ -12,37 +12,57 @@ import { useAuth } from '../state/auth';
 
 const PER_PAGE = 12;
 
+function parseIngredientsParam(raw) {
+  if (!raw || !String(raw).trim()) return [];
+  return String(raw)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function readFiltersFromParams(searchParams) {
   const pageRaw = parseInt(searchParams.get('page') || '1', 10);
+  let selectedIngredients = parseIngredientsParam(searchParams.get('ingredients'));
+  if (!selectedIngredients.length) {
+    selectedIngredients = searchParams.getAll('ingredient').map((part) => part.trim()).filter(Boolean);
+  }
+  const seen = new Set();
+  selectedIngredients = selectedIngredients.filter((name) => {
+    const key = name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   return {
     q: searchParams.get('q') || '',
     categoryId: searchParams.get('category_id') || '',
     timePreset: searchParams.get('time') || '',
-    ingredient: searchParams.get('ingredient') || '',
+    selectedIngredients,
     sort: searchParams.get('sort') || 'newest',
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
   };
 }
 
-function buildRecipesQuery({ q, categoryId, cookingTimeMin, cookingTimeMax, ingredient, sort, page }) {
+function buildRecipesQuery({ q, categoryId, cookingTimeMin, cookingTimeMax, selectedIngredients, sort, page }) {
   const params = new URLSearchParams();
   if (q.trim()) params.set('q', q.trim());
   if (categoryId) params.set('category_id', categoryId);
   if (cookingTimeMin != null) params.set('cooking_time_min', String(cookingTimeMin));
   if (cookingTimeMax != null) params.set('cooking_time_max', String(cookingTimeMax));
-  if (ingredient.trim()) params.set('ingredient', ingredient.trim());
+  if (selectedIngredients?.length) params.set('ingredients', selectedIngredients.join(','));
   if (sort && sort !== 'newest') params.set('sort', sort);
   params.set('page', String(page));
   params.set('per_page', String(PER_PAGE));
   return `?${params.toString()}`;
 }
 
-function buildCatalogSearchParams({ q, categoryId, timePreset, ingredient, sort, page }) {
+function buildCatalogSearchParams({ q, categoryId, timePreset, selectedIngredients, sort, page }) {
   const params = new URLSearchParams();
   if (q.trim()) params.set('q', q.trim());
   if (categoryId) params.set('category_id', categoryId);
   if (timePreset) params.set('time', timePreset);
-  if (ingredient.trim()) params.set('ingredient', ingredient.trim());
+  if (selectedIngredients?.length) params.set('ingredients', selectedIngredients.join(','));
   if (sort && sort !== 'newest') params.set('sort', sort);
   if (page > 1) params.set('page', String(page));
   return params;
@@ -59,11 +79,14 @@ export function Home() {
   const [q, setQ] = useState(initial.q);
   const [categoryId, setCategoryId] = useState(initial.categoryId);
   const [timePreset, setTimePreset] = useState(initial.timePreset);
-  const [ingredient, setIngredient] = useState(initial.ingredient);
+  const [selectedIngredients, setSelectedIngredients] = useState(initial.selectedIngredients);
+  const [allIngredients, setAllIngredients] = useState([]);
+  const [ingredientsLoading, setIngredientsLoading] = useState(true);
   const [sort, setSort] = useState(initial.sort);
   const [page, setPage] = useState(initial.page);
   const [listMeta, setListMeta] = useState({ total: 0, pages: 1 });
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,7 +97,7 @@ export function Home() {
     setQ(next.q);
     setCategoryId(next.categoryId);
     setTimePreset(next.timePreset);
-    setIngredient(next.ingredient);
+    setSelectedIngredients(next.selectedIngredients);
     setSort(next.sort);
     setPage(next.page);
   }, [searchParams]);
@@ -91,6 +114,22 @@ export function Home() {
     loadCategories();
   }, []);
 
+  useEffect(() => {
+    async function loadIngredients() {
+      setIngredientsLoading(true);
+      try {
+        const data = await apiFetch('/ingredients');
+        const items = (data.items || []).sort((a, b) => a.localeCompare(b, 'uk'));
+        setAllIngredients(items);
+      } catch (e) {
+        setError((prev) => prev || e.message || 'Не вдалося завантажити інгредієнти');
+      } finally {
+        setIngredientsLoading(false);
+      }
+    }
+    loadIngredients();
+  }, []);
+
   const timeQuery = useMemo(() => timePresetToQuery(timePreset), [timePreset]);
 
   const recipesPath = useMemo(
@@ -100,11 +139,11 @@ export function Home() {
         categoryId,
         cookingTimeMin: timeQuery.cooking_time_min,
         cookingTimeMax: timeQuery.cooking_time_max,
-        ingredient,
+        selectedIngredients,
         sort,
         page,
       })}`,
-    [q, categoryId, timeQuery, ingredient, sort, page]
+    [q, categoryId, timeQuery, selectedIngredients, sort, page]
   );
 
   const syncUrl = useCallback(
@@ -113,14 +152,14 @@ export function Home() {
         q,
         categoryId,
         timePreset,
-        ingredient,
+        selectedIngredients,
         sort,
         page,
         ...overrides,
       });
       setSearchParams(params, { replace: true });
     },
-    [q, categoryId, timePreset, ingredient, sort, page, setSearchParams]
+    [q, categoryId, timePreset, selectedIngredients, sort, page, setSearchParams]
   );
 
   const fetchRecipes = useCallback(async () => {
@@ -157,9 +196,9 @@ export function Home() {
     syncUrl({ timePreset: next, page: 1 });
   }
 
-  function updateIngredient(next) {
-    setIngredient(next);
-    syncUrl({ ingredient: next, page: 1 });
+  function updateSelectedIngredients(next) {
+    setSelectedIngredients(next);
+    syncUrl({ selectedIngredients: next, page: 1 });
   }
 
   function updateSort(next) {
@@ -175,7 +214,7 @@ export function Home() {
   function resetFilters() {
     setCategoryId('');
     setTimePreset('');
-    setIngredient('');
+    setSelectedIngredients([]);
     setSort('newest');
     setPage(1);
     setQ('');
@@ -185,6 +224,7 @@ export function Home() {
   async function createRecipe(payload) {
     setBusy(true);
     setError('');
+    setMessage('');
     try {
       let nextPayload = payload;
       if (payload.image_file) {
@@ -197,10 +237,11 @@ export function Home() {
         delete nextPayload.image_file;
       }
       const data = await apiFetch('/recipes', { method: 'POST', auth: true, body: nextPayload });
-      setRecipes((prev) => [data.recipe, ...prev]);
       setCreating(false);
-      syncUrl({ page: 1 });
-      fetchRecipes();
+      setMessage(
+        data.message ||
+          'Рецепт надіслано на модерацію. Після схвалення адміністратором він з’явиться в каталозі.'
+      );
     } catch (e) {
       setError(e.message || 'Не вдалося створити рецепт');
     } finally {
@@ -232,6 +273,7 @@ export function Home() {
       </header>
 
       {error ? <div className="alert">{error}</div> : null}
+      {message ? <div className="success">{message}</div> : null}
 
       <CategoryScroller categories={categories} categoryId={categoryId} onSelect={updateCategoryId} />
 
@@ -242,8 +284,10 @@ export function Home() {
           onCategoryChange={updateCategoryId}
           timePreset={timePreset}
           onTimePresetChange={updateTimePreset}
-          ingredient={ingredient}
-          onIngredientChange={updateIngredient}
+          selectedIngredients={selectedIngredients}
+          onIngredientsChange={updateSelectedIngredients}
+          allIngredients={allIngredients}
+          ingredientsLoading={ingredientsLoading}
           sort={sort}
           onSortChange={updateSort}
           onReset={resetFilters}

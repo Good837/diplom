@@ -111,7 +111,7 @@ export function ProfileActivityTabs({
           recipes.length ? (
             <div className="gridCards">
               {sortedRecipes.map((r) => (
-                <RecipeCard key={r.id} recipe={r} variant="catalog" />
+                <RecipeCard key={r.id} recipe={r} variant="catalog" showStatus={isOwnProfile} />
               ))}
             </div>
           ) : (

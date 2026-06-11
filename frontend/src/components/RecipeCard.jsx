@@ -5,11 +5,12 @@ import { Link } from 'react-router-dom';
 
 
 import { resolveAssetUrl } from '../api/client';
+import { getRecipeStatusLabel } from '../utils/recipeStatus';
 import { StarRating } from './StarRating';
 
 
 
-export function RecipeCard({ recipe, onOpenDetails, variant = 'catalog' }) {
+export function RecipeCard({ recipe, onOpenDetails, variant = 'catalog', showStatus = false }) {
 
   function openDetails(e) {
 
@@ -21,6 +22,13 @@ export function RecipeCard({ recipe, onOpenDetails, variant = 'catalog' }) {
 
 
 
+  const statusBadge =
+    showStatus && recipe.status && recipe.status !== 'approved' ? (
+      <span className={`recipeStatusBadge recipeStatusBadge--${recipe.status}`}>
+        {getRecipeStatusLabel(recipe.status)}
+      </span>
+    ) : null;
+
   if (variant === 'catalog') {
 
     const content = (
@@ -28,6 +36,7 @@ export function RecipeCard({ recipe, onOpenDetails, variant = 'catalog' }) {
       <>
 
         <div className="recipeCardCatalogImgWrap">
+          {statusBadge}
 
           {recipe.image_url ? (
 
@@ -97,6 +106,7 @@ export function RecipeCard({ recipe, onOpenDetails, variant = 'catalog' }) {
     <div className="card">
 
       <div className="cardHeader">
+        {statusBadge}
 
         <h3 className="cardTitle">
 

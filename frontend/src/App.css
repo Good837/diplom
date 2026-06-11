@@ -606,6 +606,54 @@ h2 {
   min-width: 40px;
 }
 
+.ingredientSuggest {
+  position: relative;
+  min-width: 0;
+}
+
+.ingredientSuggestLoading {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.ingredientSuggestList {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radiusSm);
+  box-shadow: var(--shadow);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ingredientSuggestItem {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ingredientSuggestItem:hover,
+.ingredientSuggestItemActive {
+  background: rgba(196, 165, 116, 0.18);
+}
+
 .ingredientDisplayList {
   margin: 0;
   padding-left: 1.25rem;
@@ -698,6 +746,55 @@ textarea {
   padding: 12px;
   border-radius: var(--radiusSm);
   margin: 10px 0;
+}
+
+.recipeStatusBadge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radiusSm);
+  line-height: 1.2;
+}
+
+.recipeStatusBadge--pending {
+  background: rgba(196, 165, 116, 0.25);
+  color: var(--text);
+  border: 1px solid rgba(196, 165, 116, 0.45);
+}
+
+.recipeStatusBadge--rejected {
+  background: rgba(185, 75, 58, 0.12);
+  color: var(--text);
+  border: 1px solid rgba(185, 75, 58, 0.3);
+}
+
+.recipeModerationBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radiusSm);
+  margin: 0 0 20px;
+}
+
+.recipeModerationBanner--pending {
+  background: rgba(196, 165, 116, 0.15);
+  border: 1px solid rgba(196, 165, 116, 0.35);
+}
+
+.recipeModerationBanner--rejected {
+  background: rgba(185, 75, 58, 0.1);
+  border: 1px solid rgba(185, 75, 58, 0.25);
+}
+
+.recipeCardCatalogImgWrap .recipeStatusBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
 }
 
 /* Catalog / recipe index */
@@ -923,6 +1020,18 @@ textarea {
   box-shadow: 0 0 0 3px rgba(233, 180, 76, 0.22);
 }
 
+.filterIngredientHint {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+}
+
+.filterIngredientList {
+  margin-top: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .catalogMain {
   min-width: 0;
 }
@@ -949,6 +1058,7 @@ textarea {
 }
 
 .recipeCardCatalogImgWrap {
+  position: relative;
   border-radius: var(--radius);
   overflow: hidden;
   aspect-ratio: 3 / 4;

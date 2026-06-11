@@ -11,6 +11,7 @@ import { StarRating } from '../components/StarRating';
 import { useAuth } from '../state/auth';
 import { formatCommentDate } from '../utils/formatDate';
 import { formatIngredientDisplay } from '../utils/ingredients';
+import { getRecipeStatusLabel, isRecipePublished } from '../utils/recipeStatus';
 
 
 
@@ -40,6 +41,7 @@ export function RecipeDetails() {
   const [inShoppingList, setInShoppingList] = useState(false);
 
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
   const [loading, setLoading] = useState(true);
 
@@ -63,6 +65,13 @@ export function RecipeDetails() {
 
   }, [auth.isAuthenticated, isOwner, auth.user]);
 
+  const isPublished = useMemo(() => isRecipePublished(recipe), [recipe]);
+
+  const showModerationBanner = useMemo(() => {
+    if (!recipe || isPublished) return false;
+    return Boolean(isOwner || auth.user?.is_admin);
+  }, [recipe, isPublished, isOwner, auth.user]);
+
 
 
   useEffect(() => {
@@ -75,27 +84,22 @@ export function RecipeDetails() {
 
       try {
 
-        const base = await Promise.all([
-
+        const [cats, data] = await Promise.all([
           apiFetch('/categories'),
-
           apiFetch(`/recipes/${recipeId}`, { auth: auth.isAuthenticated }),
-
-          apiFetch(`/recipes/${recipeId}/comments`),
-
         ]);
 
-        const [cats, data, commentsData] = base;
-
         setCategories(cats.items || []);
-
         setRecipe(data.recipe);
 
-        setComments(commentsData.items || []);
+        if (isRecipePublished(data.recipe)) {
+          const commentsData = await apiFetch(`/recipes/${recipeId}/comments`);
+          setComments(commentsData.items || []);
+        } else {
+          setComments([]);
+        }
 
-
-
-        if (auth.isAuthenticated) {
+        if (auth.isAuthenticated && isRecipePublished(data.recipe)) {
           const [savedList, shopping] = await Promise.all([
             apiFetch('/users/me/saved', { auth: true }),
             apiFetch('/shopping-list', { auth: true }),
@@ -130,6 +134,7 @@ export function RecipeDetails() {
     setBusy(true);
 
     setError('');
+    setMessage('');
 
     try {
 
@@ -152,8 +157,9 @@ export function RecipeDetails() {
       const data = await apiFetch(`/recipes/${recipeId}`, { method: 'PUT', auth: true, body: nextPayload });
 
       setRecipe(data.recipe);
-
+      setComments([]);
       setEditing(false);
+      setMessage(data.message || 'Рецепт оновлено та надіслано на повторну модерацію');
 
     } catch (e) {
 
@@ -386,8 +392,18 @@ export function RecipeDetails() {
 
 
       {error ? <div className="alert">{error}</div> : null}
+      {message ? <div className="success">{message}</div> : null}
 
-
+      {showModerationBanner ? (
+        <div className={`recipeModerationBanner recipeModerationBanner--${recipe.status}`}>
+          {recipe.status === 'rejected'
+            ? 'Цей рецепт відхилено адміністратором. Відредагуйте його та надішліть на повторну модерацію.'
+            : 'Цей рецепт очікує схвалення адміністратором і поки не видимий у публічному каталозі.'}
+          <span className={`recipeStatusBadge recipeStatusBadge--${recipe.status}`}>
+            {getRecipeStatusLabel(recipe.status)}
+          </span>
+        </div>
+      ) : null}
 
       <div className="detailLayout">
 
@@ -439,20 +455,22 @@ export function RecipeDetails() {
 
           </div>
 
-          <StarRating
-            ratingAvg={recipe.rating_avg}
-            ratingCount={recipe.rating_count}
-            myRating={recipe.my_rating}
-            interactive
-            disabled={busy}
-            isOwner={isOwner}
-            isAuthenticated={auth.isAuthenticated}
-            onRate={submitRating}
-          />
+          {isPublished ? (
+            <StarRating
+              ratingAvg={recipe.rating_avg}
+              ratingCount={recipe.rating_count}
+              myRating={recipe.my_rating}
+              interactive
+              disabled={busy}
+              isOwner={isOwner}
+              isAuthenticated={auth.isAuthenticated}
+              onRate={submitRating}
+            />
+          ) : null}
 
           <div className="row detailActions" style={{ flexWrap: 'wrap' }}>
 
-            {auth.isAuthenticated ? (
+            {isPublished && auth.isAuthenticated ? (
               <>
                 <button className={saved ? 'btn btnSecondary' : 'btn'} onClick={toggleSaved} disabled={busy} type="button">
                   {saved ? 'У улюблених' : 'Додати в улюблені'}
@@ -466,11 +484,17 @@ export function RecipeDetails() {
                   {inShoppingList ? 'У списку покупок' : 'До списку покупок'}
                 </button>
               </>
-            ) : (
+            ) : null}
+            {!isPublished && auth.isAuthenticated ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Збереження та оцінювання доступні після схвалення рецепта.
+              </p>
+            ) : null}
+            {isPublished && !auth.isAuthenticated ? (
               <Link className="btn btnSecondary" to="/login">
                 Увійти, щоб зберегти
               </Link>
-            )}
+            ) : null}
 
 
 
@@ -576,7 +600,11 @@ export function RecipeDetails() {
 
         <h2 className="contentBlockTitle fontSerif">Коментарі</h2>
 
-        {auth.isAuthenticated ? (
+        {!isPublished ? (
+          <p className="muted">Коментарі доступні лише для опублікованих рецептів.</p>
+        ) : null}
+
+        {isPublished && auth.isAuthenticated ? (
 
           <div className="commentForm">
 
@@ -600,18 +628,15 @@ export function RecipeDetails() {
 
           </div>
 
-        ) : (
+        ) : null}
 
+        {isPublished && !auth.isAuthenticated ? (
           <p className="muted">
-
             Щоб залишати коментарі, потрібно <Link to="/login">увійти</Link>.
-
           </p>
+        ) : null}
 
-        )}
-
-
-
+        {isPublished ? (
         <div className="commentList">
 
           {comments.map((c) => {
@@ -727,6 +752,7 @@ export function RecipeDetails() {
           {!comments.length ? <p className="muted">Коментарів поки немає.</p> : null}
 
         </div>
+        ) : null}
 
       </section>
 

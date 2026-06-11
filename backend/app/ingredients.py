@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+from sqlalchemy import func
+
 from .errors import APIError
+from .extensions import db
+from .models import Recipe, RecipeIngredient, RecipeStatus
 
 ALLOWED_UNITS = ["г", "кг", "мл", "л", "шт", "ст.л", "ч.л", "склянка", "пучок", "за смаком"]
 
@@ -81,3 +85,33 @@ def aggregate_ingredients(recipes: list) -> list[dict]:
                 buckets[key]["sources"].append(title)
 
     return sorted(buckets.values(), key=lambda x: x["text"].casefold())
+
+
+def query_distinct_ingredient_names(
+    *,
+    prefix: str | None = None,
+    exclude_owner_id: int | None = None,
+    limit: int | None = None,
+) -> list[str]:
+    normalized = func.lower(RecipeIngredient.name)
+    canonical = func.min(RecipeIngredient.name)
+
+    query = (
+        db.session.query(canonical.label("name"))
+        .join(Recipe, Recipe.id == RecipeIngredient.recipe_id)
+        .filter(Recipe.status == RecipeStatus.approved)
+    )
+
+    if exclude_owner_id is not None:
+        query = query.filter(Recipe.owner_id != int(exclude_owner_id))
+
+    prefix_text = (prefix or "").strip()
+    if prefix_text:
+        query = query.filter(RecipeIngredient.name.ilike(f"{prefix_text}%"))
+
+    query = query.group_by(normalized).order_by(normalized.asc())
+
+    if limit is not None:
+        query = query.limit(max(1, int(limit)))
+
+    return [row.name for row in query.all() if row.name]

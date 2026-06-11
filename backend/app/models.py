@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import enum
 from datetime import datetime, timezone
 
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .extensions import db
@@ -91,8 +92,15 @@ class Category(db.Model):
     def to_dict(self, *, include_recipe_count: bool = False) -> dict:
         data = {"id": self.id, "name": self.name}
         if include_recipe_count:
-            data["recipe_count"] = len(self.recipes) if self.recipes is not None else 0
+            recipes = self.recipes or []
+            data["recipe_count"] = sum(1 for r in recipes if r.status == RecipeStatus.approved)
         return data
+
+
+class RecipeStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
 
 
 class Recipe(db.Model):
@@ -105,6 +113,12 @@ class Recipe(db.Model):
     instructions: Mapped[str] = mapped_column(Text, nullable=False)
     cooking_time: Mapped[int] = mapped_column(Integer, nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[RecipeStatus] = mapped_column(
+        Enum(RecipeStatus, name="recipe_status", values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+        server_default=RecipeStatus.approved.value,
+        index=True,
+    )
 
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     category_id: Mapped[int] = mapped_column(
@@ -153,6 +167,7 @@ class Recipe(db.Model):
             "instructions": self.instructions,
             "cooking_time": self.cooking_time,
             "image_url": self.image_url,
+            "status": self.status.value if self.status else RecipeStatus.approved.value,
             "owner": self.owner.to_public_dict() if self.owner else None,
             "category": self.category.to_dict() if self.category else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,

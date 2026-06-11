@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { useMediaQuery } from '../utils/useMediaQuery';
 
@@ -33,44 +33,99 @@ function IngredientSearchIcon() {
   );
 }
 
+function sortIngredientNames(names) {
+  return [...names].sort((a, b) => a.localeCompare(b, 'uk'));
+}
+
 export function RecipeFilters({
   categories,
   categoryId,
   onCategoryChange,
   timePreset,
   onTimePresetChange,
-  ingredient,
-  onIngredientChange,
+  selectedIngredients,
+  onIngredientsChange,
+  allIngredients,
+  ingredientsLoading,
   sort,
   onSortChange,
   onReset,
 }) {
   const isDesktop = useMediaQuery('(min-width: 901px)');
+  const [ingredientSearch, setIngredientSearch] = useState('');
+
+  const sortedIngredients = useMemo(() => sortIngredientNames(allIngredients), [allIngredients]);
+
+  const visibleIngredients = useMemo(() => {
+    const query = ingredientSearch.trim().toLowerCase();
+
+    if (!query) return sortedIngredients;
+
+    const matched = sortedIngredients.filter((name) => name.toLowerCase().includes(query));
+    const selectedNotMatched = selectedIngredients.filter(
+      (name) => !name.toLowerCase().includes(query) && !matched.some((item) => item.toLowerCase() === name.toLowerCase())
+    );
+
+    return sortIngredientNames([...selectedNotMatched, ...matched]);
+  }, [sortedIngredients, ingredientSearch, selectedIngredients]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (categoryId) count += 1;
     if (timePreset) count += 1;
-    if (ingredient.trim()) count += 1;
+    if (selectedIngredients.length > 0) count += 1;
     if (sort && sort !== 'newest') count += 1;
     return count;
-  }, [categoryId, timePreset, ingredient, sort]);
+  }, [categoryId, timePreset, selectedIngredients, sort]);
+
+  function toggleIngredient(name) {
+    const key = name.toLowerCase();
+    const exists = selectedIngredients.some((item) => item.toLowerCase() === key);
+    if (exists) {
+      onIngredientsChange(selectedIngredients.filter((item) => item.toLowerCase() !== key));
+      return;
+    }
+    onIngredientsChange([...selectedIngredients, name]);
+  }
 
   const filtersBody = (
     <>
       <div className="filterGroup">
-        <h3 className="filterGroupTitle">Інгредієнт</h3>
+        <h3 className="filterGroupTitle">Інгредієнти</h3>
         <div className="filterIngredientSearch">
           <IngredientSearchIcon />
           <input
             className="filterIngredientInput"
             type="search"
-            value={ingredient}
-            onChange={(e) => onIngredientChange(e.target.value)}
-            placeholder="Напр., картопля"
-            aria-label="Фільтр за інгредієнтом"
+            value={ingredientSearch}
+            onChange={(e) => setIngredientSearch(e.target.value)}
+            placeholder="Пошук інгредієнта…"
+            aria-label="Пошук інгредієнта у фільтрі"
           />
         </div>
+        {ingredientsLoading ? <p className="muted filterIngredientHint">Завантаження…</p> : null}
+        {!ingredientsLoading && !sortedIngredients.length ? (
+          <p className="muted filterIngredientHint">Поки немає інгредієнтів для фільтра.</p>
+        ) : null}
+        {!ingredientsLoading && sortedIngredients.length ? (
+          <ul className="filterList filterIngredientList">
+            {visibleIngredients.map((name) => (
+              <li key={name}>
+                <label className="filterOption">
+                  <input
+                    type="checkbox"
+                    checked={selectedIngredients.some((item) => item.toLowerCase() === name.toLowerCase())}
+                    onChange={() => toggleIngredient(name)}
+                  />
+                  <span>{name}</span>
+                </label>
+              </li>
+            ))}
+            {!visibleIngredients.length ? (
+              <li className="muted filterIngredientHint">Нічого не знайдено.</li>
+            ) : null}
+          </ul>
+        ) : null}
       </div>
 
       <div className="filterGroup">
