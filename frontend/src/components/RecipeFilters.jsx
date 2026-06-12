@@ -2,12 +2,20 @@ import React, { useMemo, useState } from 'react';
 
 import { useMediaQuery } from '../utils/useMediaQuery';
 
-const TIME_PRESETS = [
-  { id: '', label: 'Будь-який час' },
+export const TIME_PRESETS = [
+  { id: 'under15', label: 'До 15 хв', min: null, max: 15 },
+  { id: '15-30', label: '15–30 хв', min: 15, max: 30 },
+  { id: '30-45', label: '30–45 хв', min: 30, max: 45 },
+  { id: '45-60', label: '45–60 хв', min: 45, max: 60 },
+  { id: '60-90', label: '60–90 хв', min: 60, max: 90 },
+  { id: '90-120', label: '90–120 хв', min: 90, max: 120 },
+  { id: 'over120', label: '120+ хв', min: 121, max: null },
   { id: 'under30', label: 'До 30 хв', min: null, max: 30 },
   { id: '30-60', label: '30–60 хв', min: 30, max: 60 },
   { id: 'over60', label: '60+ хв', min: 61, max: null },
 ];
+
+const TIME_PRESET_IDS = new Set(TIME_PRESETS.map((p) => p.id));
 
 const SORT_OPTIONS = [
   { id: 'newest', label: 'Нові' },
@@ -39,10 +47,10 @@ function sortIngredientNames(names) {
 
 export function RecipeFilters({
   categories,
-  categoryId,
+  selectedCategoryIds,
   onCategoryChange,
-  timePreset,
-  onTimePresetChange,
+  selectedTimePresets,
+  onTimePresetsChange,
   selectedIngredients,
   onIngredientsChange,
   allIngredients,
@@ -71,12 +79,12 @@ export function RecipeFilters({
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (categoryId) count += 1;
-    if (timePreset) count += 1;
+    if (selectedCategoryIds.length > 0) count += 1;
+    if (selectedTimePresets.length > 0) count += 1;
     if (selectedIngredients.length > 0) count += 1;
     if (sort && sort !== 'newest') count += 1;
     return count;
-  }, [categoryId, timePreset, selectedIngredients, sort]);
+  }, [selectedCategoryIds, selectedTimePresets, selectedIngredients, sort]);
 
   function toggleIngredient(name) {
     const key = name.toLowerCase();
@@ -86,6 +94,25 @@ export function RecipeFilters({
       return;
     }
     onIngredientsChange([...selectedIngredients, name]);
+  }
+
+  function toggleCategory(id) {
+    const key = String(id);
+    const exists = selectedCategoryIds.some((item) => String(item) === key);
+    if (exists) {
+      onCategoryChange(selectedCategoryIds.filter((item) => String(item) !== key));
+      return;
+    }
+    onCategoryChange([...selectedCategoryIds, key]);
+  }
+
+  function toggleTimePreset(presetId) {
+    const exists = selectedTimePresets.includes(presetId);
+    if (exists) {
+      onTimePresetsChange(selectedTimePresets.filter((id) => id !== presetId));
+      return;
+    }
+    onTimePresetsChange([...selectedTimePresets, presetId]);
   }
 
   const filtersBody = (
@@ -144,7 +171,11 @@ export function RecipeFilters({
         <ul className="filterList">
           <li>
             <label className="filterOption">
-              <input type="checkbox" checked={!categoryId} onChange={() => onCategoryChange('')} />
+              <input
+                type="checkbox"
+                checked={selectedCategoryIds.length === 0}
+                onChange={() => onCategoryChange([])}
+              />
               <span>Усі категорії</span>
             </label>
           </li>
@@ -153,8 +184,8 @@ export function RecipeFilters({
               <label className="filterOption">
                 <input
                   type="checkbox"
-                  checked={String(categoryId) === String(c.id)}
-                  onChange={() => onCategoryChange(String(categoryId) === String(c.id) ? '' : String(c.id))}
+                  checked={selectedCategoryIds.some((item) => String(item) === String(c.id))}
+                  onChange={() => toggleCategory(c.id)}
                 />
                 <span>
                   {c.name}
@@ -172,12 +203,12 @@ export function RecipeFilters({
         <h3 className="filterGroupTitle">Час приготування</h3>
         <ul className="filterList">
           {TIME_PRESETS.map((p) => (
-            <li key={p.id || 'any'}>
+            <li key={p.id}>
               <label className="filterOption">
                 <input
                   type="checkbox"
-                  checked={timePreset === p.id}
-                  onChange={() => onTimePresetChange(timePreset === p.id ? '' : p.id)}
+                  checked={selectedTimePresets.includes(p.id)}
+                  onChange={() => toggleTimePreset(p.id)}
                 />
                 <span>{p.label}</span>
               </label>
@@ -205,8 +236,15 @@ export function RecipeFilters({
   );
 }
 
-export function timePresetToQuery(timePreset) {
-  const preset = TIME_PRESETS.find((p) => p.id === timePreset);
-  if (!preset || !preset.id) return { cooking_time_min: null, cooking_time_max: null };
-  return { cooking_time_min: preset.min, cooking_time_max: preset.max };
+export function parseTimePresetsParam(raw) {
+  if (!raw || !String(raw).trim()) return [];
+  return String(raw)
+    .split(',')
+    .map((part) => part.trim())
+    .filter((id) => TIME_PRESET_IDS.has(id));
+}
+
+export function timePresetsToQuery(selectedTimePresets) {
+  if (!selectedTimePresets?.length) return { time: null };
+  return { time: selectedTimePresets.join(',') };
 }

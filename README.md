@@ -155,7 +155,7 @@ npm start
 | `GET` | `/api/auth/me` | Поточний користувач (JWT) |
 | `GET` | `/api/categories` | Список категорій |
 | `POST` | `/api/categories` | Створення категорії (JWT, адмін) |
-| `GET` | `/api/recipes` | Каталог: `q`, `ingredient` / `ingredients`, `category_id`, `cooking_time_min`, `cooking_time_max`, `sort` (`newest`, `oldest`, `title`, `rating`, `popular`), `owner=me`, `page`, `per_page` |
+| `GET` | `/api/recipes` | Каталог: `q`, `ingredient` / `ingredients`, `category_id` (один або кілька через кому, OR), `time` (пресети `under15`, `15-30`, `30-45`, `45-60`, `60-90`, `90-120`, `over120` та сумісні `under30`, `30-60`, `over60` — через кому, OR), `cooking_time_min`, `cooking_time_max` (якщо `time` не задано), `sort` (`newest`, `oldest`, `title`, `rating`, `popular`), `owner=me`, `page`, `per_page` |
 | `POST` | `/api/recipes` | Створення рецепта → статус `pending` (JWT) |
 | `PUT` | `/api/recipes/<id>` | Редагування → повторна модерація (JWT, власник) |
 | `DELETE` | `/api/recipes/<id>` | Видалення (JWT, власник або адмін) |

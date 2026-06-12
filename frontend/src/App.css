@@ -621,11 +621,6 @@ h2 {
 }
 
 .ingredientSuggestList {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
   margin: 0;
   padding: 4px 0;
   list-style: none;
@@ -635,6 +630,11 @@ h2 {
   box-shadow: var(--shadow);
   max-height: 220px;
   overflow-y: auto;
+}
+
+.ingredientSuggestListPortal {
+  position: fixed;
+  z-index: 1200;
 }
 
 .ingredientSuggestItem {
@@ -674,6 +674,15 @@ h2 {
 @media (max-width: 480px) {
   .container {
     width: min(1280px, calc(100% - 24px));
+  }
+
+  .categoryScrollerWrap {
+    gap: 2px;
+  }
+
+  .categoryScrollerNav {
+    width: 32px;
+    height: 32px;
   }
 
   .categoryScroller {
@@ -809,15 +818,54 @@ textarea {
   font-weight: 600;
 }
 
+.categoryScrollerWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 28px;
+}
+
+.categoryScrollerNav {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.categoryScrollerNav svg {
+  width: 18px;
+  height: 18px;
+}
+
+.categoryScrollerNav:hover {
+  border-color: var(--accent);
+  background: rgba(233, 180, 76, 0.12);
+}
+
 .categoryScroller {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   gap: 20px;
   overflow-x: auto;
   padding: 8px 4px 20px;
-  margin-bottom: 28px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   scroll-snap-type: x mandatory;
   scroll-padding-inline: 8px;
+}
+
+.categoryScroller::-webkit-scrollbar {
+  display: none;
 }
 
 .categoryScrollerItem {

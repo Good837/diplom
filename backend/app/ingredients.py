@@ -107,7 +107,7 @@ def query_distinct_ingredient_names(
 
     prefix_text = (prefix or "").strip()
     if prefix_text:
-        query = query.filter(RecipeIngredient.name.ilike(f"{prefix_text}%"))
+        query = query.filter(RecipeIngredient.name.ilike(f"%{prefix_text}%"))
 
     query = query.group_by(normalized).order_by(normalized.asc())
 

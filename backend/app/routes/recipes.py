@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required, verify_jwt_in_request
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 
 from ..authz import (
     can_manage_recipe,
@@ -85,6 +85,84 @@ def _parse_rating_value(data: dict) -> int:
     return value
 
 
+TIME_PRESETS: dict[str, tuple[int | None, int | None]] = {
+    "under15": (None, 15),
+    "15-30": (15, 30),
+    "30-45": (30, 45),
+    "45-60": (45, 60),
+    "60-90": (60, 90),
+    "90-120": (90, 120),
+    "over120": (121, None),
+    "under30": (None, 30),
+    "30-60": (30, 60),
+    "over60": (61, None),
+}
+
+
+def _parse_comma_list_param(name: str) -> list[str]:
+    values: list[str] = []
+    raw = (request.args.get(name) or "").strip()
+    if raw:
+        values.extend(part.strip() for part in raw.split(",") if part.strip())
+    for part in request.args.getlist(name):
+        text = (part or "").strip()
+        if text:
+            values.extend(item.strip() for item in text.split(",") if item.strip())
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        key = value.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(value)
+    return unique
+
+
+def _parse_category_ids() -> list[int]:
+    ids: list[int] = []
+    seen: set[int] = set()
+    for raw in _parse_comma_list_param("category_id"):
+        try:
+            category_id = int(raw)
+        except ValueError:
+            raise APIError("Некоректне значення параметра 'category_id'", 400)
+        if category_id in seen:
+            continue
+        seen.add(category_id)
+        ids.append(category_id)
+    return ids
+
+
+def _parse_time_preset_ids() -> list[str]:
+    preset_ids: list[str] = []
+    seen: set[str] = set()
+    for raw in _parse_comma_list_param("time"):
+        if raw not in TIME_PRESETS:
+            raise APIError("Некоректне значення параметра 'time'", 400)
+        if raw in seen:
+            continue
+        seen.add(raw)
+        preset_ids.append(raw)
+    return preset_ids
+
+
+def _apply_time_preset_filters(query, preset_ids: list[str]):
+    conditions = []
+    for preset_id in preset_ids:
+        tmin, tmax = TIME_PRESETS[preset_id]
+        parts = []
+        if tmin is not None:
+            parts.append(Recipe.cooking_time >= tmin)
+        if tmax is not None:
+            parts.append(Recipe.cooking_time <= tmax)
+        if parts:
+            conditions.append(and_(*parts))
+    if conditions:
+        query = query.filter(or_(*conditions))
+    return query
+
+
 def _parse_ingredient_filters() -> list[str]:
     names: list[str] = []
 
@@ -126,7 +204,8 @@ def _paginate(query):
 def list_recipes():
     q = (request.args.get("q") or "").strip()
     ingredient_names = _parse_ingredient_filters()
-    category_id = _int_query("category_id", None)
+    category_ids = _parse_category_ids()
+    time_preset_ids = _parse_time_preset_ids()
     cooking_time_max = _int_query("cooking_time_max", None)
     cooking_time_min = _int_query("cooking_time_min", None)
     owner = (request.args.get("owner") or "").strip().lower()
@@ -156,14 +235,17 @@ def list_recipes():
             Recipe.ingredients.any(func.lower(RecipeIngredient.name) == ingredient_name.casefold())
         )
 
-    if category_id is not None:
-        query = query.filter(Recipe.category_id == category_id)
+    if category_ids:
+        query = query.filter(Recipe.category_id.in_(category_ids))
 
-    if cooking_time_max is not None:
-        query = query.filter(Recipe.cooking_time <= cooking_time_max)
+    if time_preset_ids:
+        query = _apply_time_preset_filters(query, time_preset_ids)
+    else:
+        if cooking_time_max is not None:
+            query = query.filter(Recipe.cooking_time <= cooking_time_max)
 
-    if cooking_time_min is not None:
-        query = query.filter(Recipe.cooking_time >= cooking_time_min)
+        if cooking_time_min is not None:
+            query = query.filter(Recipe.cooking_time >= cooking_time_min)
 
     if sort == "title":
         query = query.order_by(Recipe.title.asc())

@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { apiFetch, apiFetchFormData } from '../api/client';
 import { CategoryScroller } from '../components/CategoryScroller';
 import { RecipeCard } from '../components/RecipeCard';
-import { RecipeFilters, timePresetToQuery } from '../components/RecipeFilters';
+import { RecipeFilters, parseTimePresetsParam, timePresetsToQuery } from '../components/RecipeFilters';
 import { RecipeForm } from '../components/RecipeForm';
 import { RecipeModal } from '../components/RecipeModal';
 import { Pagination } from '../components/Pagination';
@@ -12,12 +12,44 @@ import { useAuth } from '../state/auth';
 
 const PER_PAGE = 12;
 
-function parseIngredientsParam(raw) {
+function parseCommaListParam(raw) {
   if (!raw || !String(raw).trim()) return [];
   return String(raw)
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function parseIngredientsParam(raw) {
+  return parseCommaListParam(raw);
+}
+
+function parseCategoryIdsParam(searchParams) {
+  let ids = parseCommaListParam(searchParams.get('category_id'));
+  if (!ids.length) {
+    ids = searchParams.getAll('category_id').flatMap((part) => parseCommaListParam(part));
+  }
+  const seen = new Set();
+  return ids.filter((id) => {
+    const key = String(id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function parseTimePresetsFromParams(searchParams) {
+  let presets = parseTimePresetsParam(searchParams.get('time'));
+  if (!presets.length) {
+    const fromAll = searchParams.getAll('time').flatMap((part) => parseTimePresetsParam(part));
+    const seen = new Set();
+    presets = fromAll.filter((id) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+  return presets;
 }
 
 function readFiltersFromParams(searchParams) {
@@ -26,30 +58,30 @@ function readFiltersFromParams(searchParams) {
   if (!selectedIngredients.length) {
     selectedIngredients = searchParams.getAll('ingredient').map((part) => part.trim()).filter(Boolean);
   }
-  const seen = new Set();
+  const seenIngredients = new Set();
   selectedIngredients = selectedIngredients.filter((name) => {
     const key = name.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
+    if (seenIngredients.has(key)) return false;
+    seenIngredients.add(key);
     return true;
   });
 
   return {
     q: searchParams.get('q') || '',
-    categoryId: searchParams.get('category_id') || '',
-    timePreset: searchParams.get('time') || '',
+    selectedCategoryIds: parseCategoryIdsParam(searchParams),
+    selectedTimePresets: parseTimePresetsFromParams(searchParams),
     selectedIngredients,
     sort: searchParams.get('sort') || 'newest',
     page: Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1,
   };
 }
 
-function buildRecipesQuery({ q, categoryId, cookingTimeMin, cookingTimeMax, selectedIngredients, sort, page }) {
+function buildRecipesQuery({ q, selectedCategoryIds, selectedTimePresets, selectedIngredients, sort, page }) {
   const params = new URLSearchParams();
   if (q.trim()) params.set('q', q.trim());
-  if (categoryId) params.set('category_id', categoryId);
-  if (cookingTimeMin != null) params.set('cooking_time_min', String(cookingTimeMin));
-  if (cookingTimeMax != null) params.set('cooking_time_max', String(cookingTimeMax));
+  if (selectedCategoryIds?.length) params.set('category_id', selectedCategoryIds.join(','));
+  const timeQuery = timePresetsToQuery(selectedTimePresets);
+  if (timeQuery.time) params.set('time', timeQuery.time);
   if (selectedIngredients?.length) params.set('ingredients', selectedIngredients.join(','));
   if (sort && sort !== 'newest') params.set('sort', sort);
   params.set('page', String(page));
@@ -57,11 +89,11 @@ function buildRecipesQuery({ q, categoryId, cookingTimeMin, cookingTimeMax, sele
   return `?${params.toString()}`;
 }
 
-function buildCatalogSearchParams({ q, categoryId, timePreset, selectedIngredients, sort, page }) {
+function buildCatalogSearchParams({ q, selectedCategoryIds, selectedTimePresets, selectedIngredients, sort, page }) {
   const params = new URLSearchParams();
   if (q.trim()) params.set('q', q.trim());
-  if (categoryId) params.set('category_id', categoryId);
-  if (timePreset) params.set('time', timePreset);
+  if (selectedCategoryIds?.length) params.set('category_id', selectedCategoryIds.join(','));
+  if (selectedTimePresets?.length) params.set('time', selectedTimePresets.join(','));
   if (selectedIngredients?.length) params.set('ingredients', selectedIngredients.join(','));
   if (sort && sort !== 'newest') params.set('sort', sort);
   if (page > 1) params.set('page', String(page));
@@ -77,8 +109,8 @@ export function Home() {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
   const [q, setQ] = useState(initial.q);
-  const [categoryId, setCategoryId] = useState(initial.categoryId);
-  const [timePreset, setTimePreset] = useState(initial.timePreset);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState(initial.selectedCategoryIds);
+  const [selectedTimePresets, setSelectedTimePresets] = useState(initial.selectedTimePresets);
   const [selectedIngredients, setSelectedIngredients] = useState(initial.selectedIngredients);
   const [allIngredients, setAllIngredients] = useState([]);
   const [ingredientsLoading, setIngredientsLoading] = useState(true);
@@ -95,8 +127,8 @@ export function Home() {
   useEffect(() => {
     const next = readFiltersFromParams(searchParams);
     setQ(next.q);
-    setCategoryId(next.categoryId);
-    setTimePreset(next.timePreset);
+    setSelectedCategoryIds(next.selectedCategoryIds);
+    setSelectedTimePresets(next.selectedTimePresets);
     setSelectedIngredients(next.selectedIngredients);
     setSort(next.sort);
     setPage(next.page);
@@ -130,28 +162,25 @@ export function Home() {
     loadIngredients();
   }, []);
 
-  const timeQuery = useMemo(() => timePresetToQuery(timePreset), [timePreset]);
-
   const recipesPath = useMemo(
     () =>
       `/recipes${buildRecipesQuery({
         q,
-        categoryId,
-        cookingTimeMin: timeQuery.cooking_time_min,
-        cookingTimeMax: timeQuery.cooking_time_max,
+        selectedCategoryIds,
+        selectedTimePresets,
         selectedIngredients,
         sort,
         page,
       })}`,
-    [q, categoryId, timeQuery, selectedIngredients, sort, page]
+    [q, selectedCategoryIds, selectedTimePresets, selectedIngredients, sort, page]
   );
 
   const syncUrl = useCallback(
     (overrides = {}) => {
       const params = buildCatalogSearchParams({
         q,
-        categoryId,
-        timePreset,
+        selectedCategoryIds,
+        selectedTimePresets,
         selectedIngredients,
         sort,
         page,
@@ -159,7 +188,7 @@ export function Home() {
       });
       setSearchParams(params, { replace: true });
     },
-    [q, categoryId, timePreset, selectedIngredients, sort, page, setSearchParams]
+    [q, selectedCategoryIds, selectedTimePresets, selectedIngredients, sort, page, setSearchParams]
   );
 
   const fetchRecipes = useCallback(async () => {
@@ -186,14 +215,14 @@ export function Home() {
     return () => clearTimeout(timer);
   }, [fetchRecipes]);
 
-  function updateCategoryId(next) {
-    setCategoryId(next);
-    syncUrl({ categoryId: next, page: 1 });
+  function updateSelectedCategoryIds(next) {
+    setSelectedCategoryIds(next);
+    syncUrl({ selectedCategoryIds: next, page: 1 });
   }
 
-  function updateTimePreset(next) {
-    setTimePreset(next);
-    syncUrl({ timePreset: next, page: 1 });
+  function updateSelectedTimePresets(next) {
+    setSelectedTimePresets(next);
+    syncUrl({ selectedTimePresets: next, page: 1 });
   }
 
   function updateSelectedIngredients(next) {
@@ -212,8 +241,8 @@ export function Home() {
   }
 
   function resetFilters() {
-    setCategoryId('');
-    setTimePreset('');
+    setSelectedCategoryIds([]);
+    setSelectedTimePresets([]);
     setSelectedIngredients([]);
     setSort('newest');
     setPage(1);
@@ -275,15 +304,19 @@ export function Home() {
       {error ? <div className="alert">{error}</div> : null}
       {message ? <div className="success">{message}</div> : null}
 
-      <CategoryScroller categories={categories} categoryId={categoryId} onSelect={updateCategoryId} />
+      <CategoryScroller
+        categories={categories}
+        selectedCategoryIds={selectedCategoryIds}
+        onSelect={updateSelectedCategoryIds}
+      />
 
       <div className="catalogLayout">
         <RecipeFilters
           categories={categories}
-          categoryId={categoryId}
-          onCategoryChange={updateCategoryId}
-          timePreset={timePreset}
-          onTimePresetChange={updateTimePreset}
+          selectedCategoryIds={selectedCategoryIds}
+          onCategoryChange={updateSelectedCategoryIds}
+          selectedTimePresets={selectedTimePresets}
+          onTimePresetsChange={updateSelectedTimePresets}
           selectedIngredients={selectedIngredients}
           onIngredientsChange={updateSelectedIngredients}
           allIngredients={allIngredients}
