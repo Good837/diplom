@@ -27,6 +27,7 @@ class Settings:
         smtp_password: str,
         smtp_from: str,
         smtp_use_tls: bool,
+        smtp_use_ssl: bool,
         frontend_url: str,
     ):
         self.database_url = database_url
@@ -40,6 +41,7 @@ class Settings:
         self.smtp_password = smtp_password
         self.smtp_from = smtp_from
         self.smtp_use_tls = smtp_use_tls
+        self.smtp_use_ssl = smtp_use_ssl
         self.frontend_url = frontend_url
 
     @staticmethod
@@ -112,5 +114,6 @@ class Settings:
             smtp_password=smtp_password,
             smtp_from=smtp_from,
             smtp_use_tls=_env_bool("SMTP_USE_TLS", True),
+            smtp_use_ssl=_env_bool("SMTP_USE_SSL", False),
             frontend_url=frontend_url,
         )

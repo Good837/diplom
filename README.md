@@ -59,13 +59,14 @@ DATABASE_URL=postgresql+psycopg://USER:PASSWORD@localhost:5432/tastyhub
 JWT_SECRET_KEY=change_me
 CORS_ORIGINS=http://localhost:3000
 
-# Підтвердження email (обов'язково для реєстрації)
-SMTP_HOST=sandbox.smtp.mailtrap.io
+# Підтвердження email — Gmail (листи на справжню пошту)
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=your_mailtrap_user
-SMTP_PASSWORD=your_mailtrap_password
-SMTP_FROM=TastyHub <noreply@tastyhub.local>
+SMTP_USER=you@gmail.com
+SMTP_PASSWORD=your_16_char_app_password
+SMTP_FROM=TastyHub <you@gmail.com>
 SMTP_USE_TLS=true
+SMTP_USE_SSL=false
 FRONTEND_URL=http://localhost:3000
 
 # Опційно: завантаження зображень
@@ -73,7 +74,18 @@ UPLOAD_DIR=../uploads
 MAX_UPLOAD_MB=5
 ```
 
-Для підтвердження email потрібен робочий SMTP (наприклад [Mailtrap](https://mailtrap.io/) для розробки). `FRONTEND_URL` — адреса React-додатку для посилання в листі (`/verify-email?token=...`).
+`FRONTEND_URL` — адреса React-додатку для посилання в листі (`/verify-email?token=...`).
+
+#### Підтвердження email через Gmail
+
+1. Увімкніть **двофакторну автентифікацію** в [Google Account](https://myaccount.google.com/security).
+2. Перейдіть: Security → **App passwords** (Паролі додатків).
+3. Створіть пароль для «Mail» / «Other (TastyHub)» — 16 символів без пробілів.
+4. У `backend/.env` вкажіть Gmail-адресу в `SMTP_USER` і `SMTP_FROM` (вони мають збігатися). У `SMTP_PASSWORD` — App Password, **не** звичайний пароль від акаунта.
+
+Для локальної розробки без реальної пошти можна використати [Mailtrap](https://mailtrap.io/) — приклад у [`.env.example`](.env.example).
+
+Альтернатива Gmail на порту 465: `SMTP_PORT=465`, `SMTP_USE_TLS=false`, `SMTP_USE_SSL=true`.
 
 **Залежності та міграції:**
 
@@ -175,6 +187,32 @@ UPDATE users SET is_admin = true WHERE username = 'your_username';
 
 Після цього стає доступною сторінка `/admin` і відповідні API-ендпоінти.
 
-## Деплой фронтенду
+## Деплой (Render + Vercel)
 
-У `frontend/vercel.json` налаштовано SPA rewrite для Vercel. Для production вкажіть `REACT_APP_API_URL` на URL вашого бекенду та додайте домен фронтенду до `CORS_ORIGINS` на сервері.
+### Backend на Render
+
+У Web Service → **Environment** задайте SMTP для Gmail і production-URL фронтенду:
+
+| Змінна | Значення |
+| --- | --- |
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `587` |
+| `SMTP_USER` | `ваша_адреса@gmail.com` |
+| `SMTP_PASSWORD` | App Password (16 символів) |
+| `SMTP_FROM` | `TastyHub <ваша_адреса@gmail.com>` |
+| `SMTP_USE_TLS` | `true` |
+| `SMTP_USE_SSL` | `false` |
+| `FRONTEND_URL` | URL Vercel, напр. `https://tastyhub.vercel.app` (без `/` в кінці) |
+| `CORS_ORIGINS` | URL Vercel + `http://localhost:3000` через кому |
+
+Після зміни змінних виконайте **Manual Deploy**. Якщо листи не надходять — перевірте логи Render на SMTP-помилки.
+
+### Frontend на Vercel
+
+У `frontend/vercel.json` налаштовано SPA rewrite. У Vercel → **Environment Variables**:
+
+```env
+REACT_APP_API_URL=https://your-render-api.onrender.com/api
+```
+
+Переконайтесь, що `FRONTEND_URL` на Render збігається з фактичним доменом Vercel — інакше посилання підтвердження в листі веде на `localhost`.

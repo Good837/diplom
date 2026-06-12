@@ -34,6 +34,7 @@ def create_app() -> Flask:
         SMTP_PASSWORD=settings.smtp_password,
         SMTP_FROM=settings.smtp_from,
         SMTP_USE_TLS=settings.smtp_use_tls,
+        SMTP_USE_SSL=settings.smtp_use_ssl,
         FRONTEND_URL=settings.frontend_url,
     )
 
