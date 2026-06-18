@@ -75,7 +75,7 @@ export function CategoryScroller({ categories, selectedCategoryIds, onSelect }) 
         </button>
       ) : null}
 
-      <div className="categoryScroller" ref={scrollerRef} role="list">
+      <div className="categoryScroller" ref={scrollerRef} role="group" aria-label="Категорії">
         {categories.map((c) => {
           const isActive = selectedCategoryIds.some((item) => String(item) === String(c.id));
           const iconIndex = Number.isFinite(c.icon_index) ? c.icon_index : 0;
@@ -83,7 +83,6 @@ export function CategoryScroller({ categories, selectedCategoryIds, onSelect }) 
             <button
               key={c.id}
               type="button"
-              role="listitem"
               className={`categoryScrollerItem${isActive ? ' isActive' : ''}`}
               onClick={() => toggleCategory(c.id)}
               title={c.name}
