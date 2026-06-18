@@ -189,9 +189,20 @@ UPDATE users SET is_admin = true WHERE username = 'your_username';
 
 ## Деплой (Render + Vercel)
 
+### Чому зникають зображення на Render
+
+Файлова система контейнера Render **ефемерна**: після деплою або рестарту файли в `uploads/` зникають, хоча в базі лишаються шляхи `/uploads/...`. Для production **обов'язково** налаштуйте **Cloudinary** (безкоштовний план) — нові завантаження зберігаються назавжди як `https://res.cloudinary.com/...`.
+
+Старі биті посилання `/uploads/...` у БД не відновлюються автоматично — перезавантажте фото рецептів і аватарки, або очистіть їх у SQL:
+
+```sql
+UPDATE recipes SET image_url = NULL WHERE image_url LIKE '/uploads/%';
+UPDATE users SET avatar_url = NULL WHERE avatar_url LIKE '/uploads/%';
+```
+
 ### Backend на Render
 
-У Web Service → **Environment** задайте SMTP для Gmail і production-URL фронтенду:
+У Web Service → **Environment** задайте SMTP, Cloudinary і production-URL фронтенду:
 
 | Змінна | Значення |
 | --- | --- |
@@ -204,15 +215,20 @@ UPDATE users SET is_admin = true WHERE username = 'your_username';
 | `SMTP_USE_SSL` | `false` |
 | `FRONTEND_URL` | URL Vercel, напр. `https://tastyhub.vercel.app` (без `/` в кінці) |
 | `CORS_ORIGINS` | URL Vercel + `http://localhost:3000` через кому |
+| `CLOUDINARY_CLOUD_NAME` | з [Cloudinary Dashboard](https://cloudinary.com/console) |
+| `CLOUDINARY_API_KEY` | API Key |
+| `CLOUDINARY_API_SECRET` | API Secret |
 
 Після зміни змінних виконайте **Manual Deploy**. Якщо листи не надходять — перевірте логи Render на SMTP-помилки.
 
 ### Frontend на Vercel
 
-У `frontend/vercel.json` налаштовано SPA rewrite. У Vercel → **Environment Variables**:
+У `frontend/vercel.json` налаштовано SPA rewrite. У Vercel → **Environment Variables** (обов'язково для production):
 
 ```env
 REACT_APP_API_URL=https://your-render-api.onrender.com/api
 ```
+
+Без цієї змінної зображення та API звертаються до `http://127.0.0.1:5000`. Після додавання змінної виконайте **Redeploy** на Vercel.
 
 Переконайтесь, що `FRONTEND_URL` на Render збігається з фактичним доменом Vercel — інакше посилання підтвердження в листі веде на `localhost`.

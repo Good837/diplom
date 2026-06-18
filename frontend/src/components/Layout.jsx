@@ -39,7 +39,12 @@ export function Layout() {
   const [searchParams] = useSearchParams();
   const [searchOpen, setSearchOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const [searchDraft, setSearchDraft] = useState(() => searchParams.get('q') || '');
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [auth.user?.avatar_url]);
 
   useEffect(() => {
     if (!searchOpen) setSearchDraft(searchParams.get('q') || '');
@@ -156,8 +161,12 @@ export function Layout() {
               ) : auth.isAuthenticated ? (
                 <>
                   <Link className="headerAvatar" to="/me" title={auth.user?.username ? `@${auth.user.username}` : 'Профіль'}>
-                    {auth.user?.avatar_url ? (
-                      <img src={resolveAssetUrl(auth.user.avatar_url)} alt="Аватарка" />
+                    {auth.user?.avatar_url && !avatarFailed ? (
+                      <img
+                        src={resolveAssetUrl(auth.user.avatar_url)}
+                        alt="Аватарка"
+                        onError={() => setAvatarFailed(true)}
+                      />
                     ) : (
                       <span className="headerAvatarFallback" aria-hidden="true">
                         {(auth.user?.username || '?').slice(0, 1).toUpperCase()}

@@ -15,6 +15,7 @@ from .routes.recipes import recipes_bp
 from .routes.shopping_list import shopping_list_bp
 from .routes.uploads import uploads_bp
 from .routes.users import users_bp
+from .storage import init_cloudinary
 
 
 def create_app() -> Flask:
@@ -36,6 +37,15 @@ def create_app() -> Flask:
         SMTP_USE_TLS=settings.smtp_use_tls,
         SMTP_USE_SSL=settings.smtp_use_ssl,
         FRONTEND_URL=settings.frontend_url,
+        CLOUDINARY_CLOUD_NAME=settings.cloudinary_cloud_name,
+        CLOUDINARY_API_KEY=settings.cloudinary_api_key,
+        CLOUDINARY_API_SECRET=settings.cloudinary_api_secret,
+    )
+
+    init_cloudinary(
+        settings.cloudinary_cloud_name,
+        settings.cloudinary_api_key,
+        settings.cloudinary_api_secret,
     )
 
     app.json.ensure_ascii = False

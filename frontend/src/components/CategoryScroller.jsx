@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
+import { resolveAssetUrl } from '../api/client';
 import { CategoryIcon } from './CategoryIcon';
 
 function ChevronIcon({ direction }) {
@@ -14,13 +15,16 @@ export function CategoryScroller({ categories, selectedCategoryIds, onSelect }) 
   const scrollerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
 
   const updateScrollState = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
-    setCanScrollLeft(scrollLeft > 2);
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 2);
+    const overflow = scrollWidth > clientWidth + 2;
+    setHasOverflow(overflow);
+    setCanScrollLeft(overflow && scrollLeft > 2);
+    setCanScrollRight(overflow && scrollLeft + clientWidth < scrollWidth - 2);
   }, []);
 
   useEffect(() => {
@@ -59,11 +63,12 @@ export function CategoryScroller({ categories, selectedCategoryIds, onSelect }) 
 
   return (
     <div className="categoryScrollerWrap">
-      {canScrollLeft ? (
+      {hasOverflow ? (
         <button
           type="button"
           className="categoryScrollerNav categoryScrollerNavPrev"
           onClick={() => scrollByDirection(-1)}
+          disabled={!canScrollLeft}
           aria-label="Попередні категорії"
         >
           <ChevronIcon direction="left" />
@@ -71,8 +76,9 @@ export function CategoryScroller({ categories, selectedCategoryIds, onSelect }) 
       ) : null}
 
       <div className="categoryScroller" ref={scrollerRef} role="list">
-        {categories.map((c, index) => {
+        {categories.map((c) => {
           const isActive = selectedCategoryIds.some((item) => String(item) === String(c.id));
+          const iconIndex = Number.isFinite(c.icon_index) ? c.icon_index : 0;
           return (
             <button
               key={c.id}
@@ -84,7 +90,11 @@ export function CategoryScroller({ categories, selectedCategoryIds, onSelect }) 
               aria-pressed={isActive}
             >
               <span className="categoryScrollerIcon">
-                <CategoryIcon index={index} />
+                {c.image_url ? (
+                  <img className="categoryScrollerImg" src={resolveAssetUrl(c.image_url)} alt="" />
+                ) : (
+                  <CategoryIcon index={iconIndex} />
+                )}
               </span>
               <span className="categoryScrollerLabel">{c.name}</span>
             </button>
@@ -92,11 +102,12 @@ export function CategoryScroller({ categories, selectedCategoryIds, onSelect }) 
         })}
       </div>
 
-      {canScrollRight ? (
+      {hasOverflow ? (
         <button
           type="button"
           className="categoryScrollerNav categoryScrollerNavNext"
           onClick={() => scrollByDirection(1)}
+          disabled={!canScrollRight}
           aria-label="Наступні категорії"
         >
           <ChevronIcon direction="right" />

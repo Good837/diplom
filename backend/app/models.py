@@ -83,6 +83,8 @@ class Category(db.Model):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    icon_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -90,7 +92,12 @@ class Category(db.Model):
     recipes: Mapped[list["Recipe"]] = relationship(back_populates="category")
 
     def to_dict(self, *, include_recipe_count: bool = False) -> dict:
-        data = {"id": self.id, "name": self.name}
+        data = {
+            "id": self.id,
+            "name": self.name,
+            "image_url": self.image_url,
+            "icon_index": self.icon_index,
+        }
         if include_recipe_count:
             recipes = self.recipes or []
             data["recipe_count"] = sum(1 for r in recipes if r.status == RecipeStatus.approved)

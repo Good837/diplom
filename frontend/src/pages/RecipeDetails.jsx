@@ -4,7 +4,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 
 
-import { apiFetch, apiFetchFormData, resolveAssetUrl } from '../api/client';
+import { apiFetch, apiFetchFormData } from '../api/client';
+import { AssetImage } from '../components/AssetImage';
+import { CommentAvatar } from '../components/CommentAvatar';
 
 import { RecipeForm } from '../components/RecipeForm';
 import { StarRating } from '../components/StarRating';
@@ -409,15 +411,12 @@ export function RecipeDetails() {
 
         <div className="detailImageWrap">
 
-          {recipe.image_url ? (
-
-            <img className="detailImage" src={resolveAssetUrl(recipe.image_url)} alt={recipe.title} />
-
-          ) : (
-
-            <div className="detailImagePlaceholder" aria-hidden="true" />
-
-          )}
+          <AssetImage
+            url={recipe.image_url}
+            alt={recipe.title}
+            className="detailImage"
+            placeholderClassName="detailImagePlaceholder"
+          />
 
         </div>
 
@@ -650,15 +649,7 @@ export function RecipeDetails() {
 
                 <div className="commentItemHeader">
 
-                  <div className="commentAvatar">
-
-                    {c.author?.avatar_url ? (
-
-                      <img src={resolveAssetUrl(c.author.avatar_url)} alt="" />
-
-                    ) : null}
-
-                  </div>
+                  <CommentAvatar url={c.author?.avatar_url} />
 
                   <div className="commentItemMeta">
 

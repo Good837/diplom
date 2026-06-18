@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { apiFetch, resolveAssetUrl } from '../api/client';
+import { apiFetch } from '../api/client';
+import { AssetImage } from './AssetImage';
 import { StarRating } from './StarRating';
 import { useAuth } from '../state/auth';
 import { formatIngredientDisplay } from '../utils/ingredients';
@@ -123,15 +124,14 @@ export function RecipeModal({ recipeId, onClose }) {
 
           {recipe ? (
             <>
-              {recipe.image_url ? (
-                <div className="modalImageWrap">
-                  <img className="modalImage" src={resolveAssetUrl(recipe.image_url)} alt={recipe.title} />
-                </div>
-              ) : (
-                <div className="modalImageWrap">
-                  <div className="detailImagePlaceholder" aria-hidden="true" />
-                </div>
-              )}
+              <div className="modalImageWrap">
+                <AssetImage
+                  url={recipe.image_url}
+                  alt={recipe.title}
+                  className="modalImage"
+                  placeholderClassName="detailImagePlaceholder"
+                />
+              </div>
 
               <div className="pillRow">
                 <span className="pill">{recipe.category?.name || 'Без категорії'}</span>

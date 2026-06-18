@@ -5,12 +5,28 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name, "").strip().lower()
     if not raw:
         return default
     return raw in {"1", "true", "yes", "on"}
+
+
+def _resolve_upload_dir() -> str:
+    default_upload_dir = (PROJECT_ROOT / "uploads").resolve()
+    upload_dir_raw = os.getenv("UPLOAD_DIR", "").strip()
+    if not upload_dir_raw:
+        return str(default_upload_dir)
+
+    upload_path = Path(upload_dir_raw)
+    if not upload_path.is_absolute():
+        upload_path = (PROJECT_ROOT / upload_path).resolve()
+    else:
+        upload_path = upload_path.resolve()
+    return str(upload_path)
 
 
 class Settings:
@@ -29,6 +45,9 @@ class Settings:
         smtp_use_tls: bool,
         smtp_use_ssl: bool,
         frontend_url: str,
+        cloudinary_cloud_name: str | None,
+        cloudinary_api_key: str | None,
+        cloudinary_api_secret: str | None,
     ):
         self.database_url = database_url
         self.jwt_secret_key = jwt_secret_key
@@ -43,6 +62,13 @@ class Settings:
         self.smtp_use_tls = smtp_use_tls
         self.smtp_use_ssl = smtp_use_ssl
         self.frontend_url = frontend_url
+        self.cloudinary_cloud_name = cloudinary_cloud_name
+        self.cloudinary_api_key = cloudinary_api_key
+        self.cloudinary_api_secret = cloudinary_api_secret
+
+    @property
+    def cloudinary_enabled(self) -> bool:
+        return bool(self.cloudinary_cloud_name and self.cloudinary_api_key and self.cloudinary_api_secret)
 
     @staticmethod
     def from_env() -> "Settings":
@@ -59,8 +85,7 @@ class Settings:
         cors_origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:3000").strip()
         cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
 
-        default_upload_dir = str((Path(__file__).resolve().parents[2] / "uploads").resolve())
-        upload_dir = os.getenv("UPLOAD_DIR", default_upload_dir).strip() or default_upload_dir
+        upload_dir = _resolve_upload_dir()
 
         max_upload_bytes_raw = (os.getenv("MAX_UPLOAD_BYTES", "") or "").strip()
         max_upload_mb_raw = (os.getenv("MAX_UPLOAD_MB", "") or "").strip()
@@ -102,6 +127,10 @@ class Settings:
         except ValueError:
             raise RuntimeError("Некоректне значення SMTP_PORT у .env (очікується ціле число)")
 
+        cloudinary_cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip() or None
+        cloudinary_api_key = os.getenv("CLOUDINARY_API_KEY", "").strip() or None
+        cloudinary_api_secret = os.getenv("CLOUDINARY_API_SECRET", "").strip() or None
+
         return Settings(
             database_url=database_url,
             jwt_secret_key=jwt_secret_key,
@@ -116,4 +145,7 @@ class Settings:
             smtp_use_tls=_env_bool("SMTP_USE_TLS", True),
             smtp_use_ssl=_env_bool("SMTP_USE_SSL", False),
             frontend_url=frontend_url,
+            cloudinary_cloud_name=cloudinary_cloud_name,
+            cloudinary_api_key=cloudinary_api_key,
+            cloudinary_api_secret=cloudinary_api_secret,
         )

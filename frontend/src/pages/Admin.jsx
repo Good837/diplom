@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 
-import { apiFetch } from '../api/client';
+import { apiFetch, apiFetchFormData, resolveAssetUrl } from '../api/client';
+import { CATEGORY_ICONS, CategoryIcon } from '../components/CategoryIcon';
 import { useAuth } from '../state/auth';
 import { formatCommentDate } from '../utils/formatDate';
 
@@ -150,6 +151,62 @@ export function Admin() {
     }
   }
 
+  function replaceCategory(updated) {
+    setCategories((prev) =>
+      prev.map((c) => (c.id === updated.id ? updated : c)).sort((a, b) => a.name.localeCompare(b.name, 'uk'))
+    );
+  }
+
+  async function updateCategoryIcon(id, iconIndex) {
+    setBusy(true);
+    setError('');
+    try {
+      const data = await apiFetch(`/categories/${id}`, {
+        method: 'PUT',
+        auth: true,
+        body: { icon_index: iconIndex },
+      });
+      replaceCategory(data.category);
+    } catch (e) {
+      setError(e.message || 'Не вдалося оновити іконку');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function uploadCategoryImage(id, file) {
+    if (!file) return;
+    setBusy(true);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const data = await apiFetchFormData(`/categories/${id}/image`, { auth: true, formData: fd });
+      replaceCategory(data.category);
+    } catch (e) {
+      setError(e.message || 'Не вдалося завантажити зображення');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearCategoryImage(id) {
+    setBusy(true);
+    setError('');
+    try {
+      const data = await apiFetch(`/categories/${id}`, {
+        method: 'PUT',
+        auth: true,
+        body: { image_url: null },
+      });
+      replaceCategory(data.category);
+    } catch (e) {
+      setError(e.message || 'Не вдалося прибрати зображення');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteUser(id) {
     if (!window.confirm('Видалити користувача?')) return;
     setBusy(true);
@@ -233,11 +290,60 @@ export function Admin() {
           </div>
           <div className="adminList">
             {categories.map((c) => (
-              <div key={c.id} className="adminListItem">
-                <span className="adminListItemTitle">{c.name}</span>
-                <button className="btn btnDanger btnSmall" type="button" onClick={() => deleteCategory(c.id)} disabled={busy}>
-                  Видалити
-                </button>
+              <div key={c.id} className="adminListItem adminCategoryItem">
+                <div className="adminCategoryMain">
+                  <div className="adminCategoryPreview">
+                    {c.image_url ? (
+                      <img src={resolveAssetUrl(c.image_url)} alt="" />
+                    ) : (
+                      <CategoryIcon index={c.icon_index ?? 0} />
+                    )}
+                  </div>
+                  <span className="adminListItemTitle">{c.name}</span>
+                </div>
+                <div className="adminCategoryControls">
+                  <label className="adminCategoryField">
+                    <span className="muted adminCategoryFieldLabel">Іконка</span>
+                    <select
+                      value={String(c.icon_index ?? 0)}
+                      disabled={busy || Boolean(c.image_url)}
+                      onChange={(e) => updateCategoryIcon(c.id, Number(e.target.value))}
+                    >
+                      {CATEGORY_ICONS.map((icon) => (
+                        <option key={icon.id} value={icon.id}>
+                          {icon.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="btn btnSecondary btnSmall adminCategoryUpload">
+                    Завантажити фото
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      disabled={busy}
+                      hidden
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        uploadCategoryImage(c.id, file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {c.image_url ? (
+                    <button
+                      className="btn btnSecondary btnSmall"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => clearCategoryImage(c.id)}
+                    >
+                      Прибрати фото
+                    </button>
+                  ) : null}
+                  <button className="btn btnDanger btnSmall" type="button" onClick={() => deleteCategory(c.id)} disabled={busy}>
+                    Видалити
+                  </button>
+                </div>
               </div>
             ))}
           </div>

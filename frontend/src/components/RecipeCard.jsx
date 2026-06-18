@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 
 
-import { resolveAssetUrl } from '../api/client';
+import { AssetImage } from './AssetImage';
 import { getRecipeStatusLabel } from '../utils/recipeStatus';
 import { StarRating } from './StarRating';
 
@@ -38,23 +38,12 @@ export function RecipeCard({ recipe, onOpenDetails, variant = 'catalog', showSta
         <div className="recipeCardCatalogImgWrap">
           {statusBadge}
 
-          {recipe.image_url ? (
-
-            <img
-
-              className="recipeCardCatalogImg"
-
-              src={resolveAssetUrl(recipe.image_url)}
-
-              alt={recipe.title}
-
-            />
-
-          ) : (
-
-            <div className="recipeCardCatalogPlaceholder" aria-hidden="true" />
-
-          )}
+          <AssetImage
+            url={recipe.image_url}
+            alt={recipe.title}
+            className="recipeCardCatalogImg"
+            placeholderClassName="recipeCardCatalogPlaceholder"
+          />
 
         </div>
 
@@ -142,13 +131,14 @@ export function RecipeCard({ recipe, onOpenDetails, variant = 'catalog', showSta
 
 
       {recipe.image_url ? (
-
         <div className="thumbWrap">
-
-          <img className="thumb" src={resolveAssetUrl(recipe.image_url)} alt={recipe.title} />
-
+          <AssetImage
+            url={recipe.image_url}
+            alt={recipe.title}
+            className="thumb"
+            placeholderClassName="recipeCardCatalogPlaceholder"
+          />
         </div>
-
       ) : null}
 
 
