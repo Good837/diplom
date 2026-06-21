@@ -47,11 +47,16 @@ export function ProfileBanner({
           {bio ? <p className="profileBannerBio">{bio}</p> : null}
           {pills.length ? (
             <div className="pillRow">
-              {pills.map((pill) => (
-                <span key={pill} className="pill pillSoft">
-                  {pill}
-                </span>
-              ))}
+              {pills.map((pill) => {
+                const label = typeof pill === 'string' ? pill : pill.label;
+                const className =
+                  typeof pill === 'string' ? 'pill pillSoft' : pill.className || 'pill pillSoft';
+                return (
+                  <span key={label} className={className}>
+                    {label}
+                  </span>
+                );
+              })}
             </div>
           ) : null}
           {showPrivacyBadge ? <span className="pill pillSoft">Приватний профіль</span> : null}
