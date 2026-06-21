@@ -37,11 +37,13 @@ class Settings:
         cors_origins: list[str],
         upload_dir: str,
         max_upload_bytes: int,
+        email_provider: str,
+        email_from: str,
+        brevo_api_key: str | None,
         smtp_host: str,
         smtp_port: int,
         smtp_user: str,
         smtp_password: str,
-        smtp_from: str,
         smtp_use_tls: bool,
         smtp_use_ssl: bool,
         frontend_url: str,
@@ -54,11 +56,13 @@ class Settings:
         self.cors_origins = cors_origins
         self.upload_dir = upload_dir
         self.max_upload_bytes = max_upload_bytes
+        self.email_provider = email_provider
+        self.email_from = email_from
+        self.brevo_api_key = brevo_api_key
         self.smtp_host = smtp_host
         self.smtp_port = smtp_port
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
-        self.smtp_from = smtp_from
         self.smtp_use_tls = smtp_use_tls
         self.smtp_use_ssl = smtp_use_ssl
         self.frontend_url = frontend_url
@@ -101,31 +105,55 @@ class Settings:
             except ValueError:
                 raise RuntimeError("Некоректне значення MAX_UPLOAD_MB у .env (очікується число)")
 
+        email_provider = os.getenv("EMAIL_PROVIDER", "smtp").strip().lower()
+        if email_provider not in {"smtp", "brevo"}:
+            raise RuntimeError("EMAIL_PROVIDER має бути smtp або brevo")
+
+        email_from = os.getenv("EMAIL_FROM", "").strip() or os.getenv("SMTP_FROM", "").strip()
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
+
+        brevo_api_key = os.getenv("BREVO_API_KEY", "").strip() or None
+
         smtp_host = os.getenv("SMTP_HOST", "").strip()
         smtp_user = os.getenv("SMTP_USER", "").strip()
         smtp_password = os.getenv("SMTP_PASSWORD", "").strip()
-        smtp_from = os.getenv("SMTP_FROM", "").strip()
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
 
-        missing_mail = [
-            name
-            for name, value in {
-                "SMTP_HOST": smtp_host,
-                "SMTP_USER": smtp_user,
-                "SMTP_PASSWORD": smtp_password,
-                "SMTP_FROM": smtp_from,
-                "FRONTEND_URL": frontend_url,
-            }.items()
-            if not value
-        ]
-        if missing_mail:
-            raise RuntimeError(f"Не задано змінні пошти у .env: {', '.join(missing_mail)}")
+        if not frontend_url:
+            raise RuntimeError("Не задано FRONTEND_URL у .env")
 
-        smtp_port_raw = os.getenv("SMTP_PORT", "587").strip()
-        try:
-            smtp_port = int(smtp_port_raw)
-        except ValueError:
-            raise RuntimeError("Некоректне значення SMTP_PORT у .env (очікується ціле число)")
+        if email_provider == "brevo":
+            missing_brevo = [
+                name
+                for name, value in {
+                    "BREVO_API_KEY": brevo_api_key,
+                    "EMAIL_FROM": email_from,
+                }.items()
+                if not value
+            ]
+            if missing_brevo:
+                raise RuntimeError(
+                    f"Не задано змінні для Brevo (EMAIL_PROVIDER=brevo): {', '.join(missing_brevo)}"
+                )
+            smtp_port = 587
+        else:
+            missing_smtp = [
+                name
+                for name, value in {
+                    "SMTP_HOST": smtp_host,
+                    "SMTP_USER": smtp_user,
+                    "SMTP_PASSWORD": smtp_password,
+                    "EMAIL_FROM": email_from,
+                }.items()
+                if not value
+            ]
+            if missing_smtp:
+                raise RuntimeError(f"Не задано змінні пошти у .env: {', '.join(missing_smtp)}")
+
+            smtp_port_raw = os.getenv("SMTP_PORT", "587").strip()
+            try:
+                smtp_port = int(smtp_port_raw)
+            except ValueError:
+                raise RuntimeError("Некоректне значення SMTP_PORT у .env (очікується ціле число)")
 
         cloudinary_cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip() or None
         cloudinary_api_key = os.getenv("CLOUDINARY_API_KEY", "").strip() or None
@@ -137,11 +165,13 @@ class Settings:
             cors_origins=cors_origins,
             upload_dir=upload_dir,
             max_upload_bytes=max_upload_bytes,
+            email_provider=email_provider,
+            email_from=email_from,
+            brevo_api_key=brevo_api_key,
             smtp_host=smtp_host,
             smtp_port=smtp_port,
             smtp_user=smtp_user,
             smtp_password=smtp_password,
-            smtp_from=smtp_from,
             smtp_use_tls=_env_bool("SMTP_USE_TLS", True),
             smtp_use_ssl=_env_bool("SMTP_USE_SSL", False),
             frontend_url=frontend_url,

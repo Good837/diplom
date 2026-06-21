@@ -59,12 +59,13 @@ DATABASE_URL=postgresql+psycopg://USER:PASSWORD@localhost:5432/tastyhub
 JWT_SECRET_KEY=change_me
 CORS_ORIGINS=http://localhost:3000
 
-# Підтвердження email — Gmail (листи на справжню пошту)
+# Підтвердження email — Gmail (локально, SMTP)
+EMAIL_PROVIDER=smtp
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=you@gmail.com
 SMTP_PASSWORD=your_16_char_app_password
-SMTP_FROM=TastyHub <you@gmail.com>
+EMAIL_FROM=TastyHub <you@gmail.com>
 SMTP_USE_TLS=true
 SMTP_USE_SSL=false
 FRONTEND_URL=http://localhost:3000
@@ -81,7 +82,25 @@ MAX_UPLOAD_MB=5
 1. Увімкніть **двофакторну автентифікацію** в [Google Account](https://myaccount.google.com/security).
 2. Перейдіть: Security → **App passwords** (Паролі додатків).
 3. Створіть пароль для «Mail» / «Other (TastyHub)» — 16 символів без пробілів.
-4. У `backend/.env` вкажіть Gmail-адресу в `SMTP_USER` і `SMTP_FROM` (вони мають збігатися). У `SMTP_PASSWORD` — App Password, **не** звичайний пароль від акаунта.
+4. У `backend/.env` вкажіть Gmail-адресу в `SMTP_USER` і `EMAIL_FROM` (вони мають збігатися). У `SMTP_PASSWORD` — App Password, **не** звичайний пароль від акаунта.
+
+#### Підтвердження email через Brevo (Render free tier)
+
+На **безкоштовному Render** SMTP-порти (587, 465) закриті — Gmail SMTP не працює. Використовуйте **Brevo HTTP API** (безкоштовно ~300 листів/день):
+
+1. Зареєструйтесь на [brevo.com](https://www.brevo.com).
+2. **Settings → Senders** — додайте Gmail і підтвердьте з листа.
+3. **SMTP & API → API Keys** — створіть ключ (`xkeysib-...`).
+4. На Render задайте:
+
+```env
+EMAIL_PROVIDER=brevo
+BREVO_API_KEY=xkeysib-ваш_ключ
+EMAIL_FROM=TastyHub <ваш@gmail.com>
+FRONTEND_URL=https://ваш-сайт.vercel.app
+```
+
+`EMAIL_FROM` має збігатися з підтвердженим відправником у Brevo. SMTP-змінні на Render не потрібні.
 
 Для локальної розробки без реальної пошти можна використати [Mailtrap](https://mailtrap.io/) — приклад у [`.env.example`](.env.example).
 
@@ -202,24 +221,24 @@ UPDATE users SET avatar_url = NULL WHERE avatar_url LIKE '/uploads/%';
 
 ### Backend на Render
 
-У Web Service → **Environment** задайте SMTP, Cloudinary і production-URL фронтенду:
+У Web Service → **Environment** задайте пошту (Brevo), Cloudinary і production-URL фронтенду.
+
+**Пошта через Brevo** (рекомендовано на free tier — SMTP на Render не працює):
 
 | Змінна | Значення |
 | --- | --- |
-| `SMTP_HOST` | `smtp.gmail.com` |
-| `SMTP_PORT` | `587` |
-| `SMTP_USER` | `ваша_адреса@gmail.com` |
-| `SMTP_PASSWORD` | App Password (16 символів) |
-| `SMTP_FROM` | `TastyHub <ваша_адреса@gmail.com>` |
-| `SMTP_USE_TLS` | `true` |
-| `SMTP_USE_SSL` | `false` |
+| `EMAIL_PROVIDER` | `brevo` |
+| `BREVO_API_KEY` | API ключ з [Brevo](https://www.brevo.com) (`xkeysib-...`) |
+| `EMAIL_FROM` | `TastyHub <ваша_адреса@gmail.com>` — підтверджений sender у Brevo |
 | `FRONTEND_URL` | URL Vercel, напр. `https://tastyhub.vercel.app` (без `/` в кінці) |
 | `CORS_ORIGINS` | URL Vercel + `http://localhost:3000` через кому |
 | `CLOUDINARY_CLOUD_NAME` | з [Cloudinary Dashboard](https://cloudinary.com/console) |
 | `CLOUDINARY_API_KEY` | API Key |
 | `CLOUDINARY_API_SECRET` | API Secret |
 
-Після зміни змінних виконайте **Manual Deploy**. Якщо листи не надходять — перевірте логи Render на SMTP-помилки.
+Локально можна залишити `EMAIL_PROVIDER=smtp` з Gmail (див. розділ вище).
+
+Після зміни змінних виконайте **Manual Deploy**. Якщо листи не надходять — перевірте логи Render (Brevo API errors).
 
 ### Frontend на Vercel
 
